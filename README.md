@@ -129,43 +129,45 @@ To disable this behaviour, manually populate and maintain the `version` field.
 
 ## How to Release
 
-To trigger a release, follow these steps:
+Push a `v*` tag and GitHub Actions will build the plugin bundle, generate `SHA256SUMS.txt`, and publish both assets to a GitHub Release.
+
+For local version bump helpers, use the following commands from `main`:
 
 1. **For Patch Release:** Run the following command:
     ```
     make patch
     ```
-   This will release a patch change.
+   This creates and pushes the next patch tag.
 
 2. **For Minor Release:** Run the following command:
     ```
     make minor
     ```
-   This will release a minor change.
+   This creates and pushes the next minor tag.
 
 3. **For Major Release:** Run the following command:
     ```
     make major
     ```
-   This will release a major change.
+   This creates and pushes the next major tag.
 
 4. **For Patch Release Candidate (RC):** Run the following command:
     ```
     make patch-rc
     ```
-   This will release a patch release candidate.
+   This creates and pushes the next patch release candidate tag.
 
 5. **For Minor Release Candidate (RC):** Run the following command:
     ```
     make minor-rc
     ```
-   This will release a minor release candidate.
+   This creates and pushes the next minor release candidate tag.
 
 6. **For Major Release Candidate (RC):** Run the following command:
     ```
     make major-rc
     ```
-   This will release a major release candidate.
+   This creates and pushes the next major release candidate tag.
 
 ## Q&A
 
