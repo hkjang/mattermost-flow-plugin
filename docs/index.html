@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mattermost Flow Plugin</title>
+    <meta name="description" content="Mattermost Flow Plugin adds kanban boards, gantt timelines, live collaboration, and deployment-friendly plugin packaging directly inside Mattermost.">
+    <meta name="theme-color" content="#f05b38">
+    <meta property="og:title" content="Mattermost Flow Plugin">
+    <meta property="og:description" content="Kanban boards, gantt timelines, real-time sync, and Mattermost-native collaboration in one plugin.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://hkjang.github.io/mattermost-flow-plugin/">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="site.css">
+</head>
+<body>
+    <div class="site-bg" aria-hidden="true">
+        <div class="site-bg__orb site-bg__orb--coral"></div>
+        <div class="site-bg__orb site-bg__orb--mint"></div>
+        <div class="site-bg__grid"></div>
+    </div>
+
+    <header class="topbar">
+        <a class="brand" href="#top" aria-label="Mattermost Flow Plugin home">
+            <span class="brand__mark">
+                <span></span>
+                <span></span>
+                <span></span>
+            </span>
+            <span class="brand__copy">
+                <strong>Mattermost Flow</strong>
+                <span>Kanban + Gantt for Mattermost</span>
+            </span>
+        </a>
+        <nav class="nav">
+            <a href="#features">Features</a>
+            <a href="#operators">Operators</a>
+            <a href="#docs">Docs</a>
+            <a href="#install">Install</a>
+        </nav>
+        <div class="topbar__actions">
+            <a class="button button--ghost" href="https://github.com/hkjang/mattermost-flow-plugin" target="_blank" rel="noreferrer">GitHub</a>
+            <a class="button button--primary" href="https://github.com/hkjang/mattermost-flow-plugin/releases/latest" target="_blank" rel="noreferrer">Latest release</a>
+        </div>
+    </header>
+
+    <main id="top">
+        <section class="hero section">
+            <div class="hero__copy reveal">
+                <p class="eyebrow">Mattermost plugin for delivery teams</p>
+                <h1>Turn channel momentum into delivery flow.</h1>
+                <p class="hero__lede">
+                    Mattermost Flow Plugin brings kanban boards, gantt timelines, live updates, deep links,
+                    and quick post actions into the same workspace where your team already chats.
+                </p>
+                <p class="hero__lede hero__lede--accent">
+                    Keep work planning and delivery timelines inside the same channel context.
+                </p>
+                <div class="hero__actions">
+                    <a class="button button--primary" href="https://github.com/hkjang/mattermost-flow-plugin/releases/latest" target="_blank" rel="noreferrer">Download plugin</a>
+                    <a class="button button--ghost" href="#docs">Explore guides</a>
+                </div>
+                <ul class="hero__stats">
+                    <li>
+                        <strong>2</strong>
+                        <span>synced views</span>
+                    </li>
+                    <li>
+                        <strong>0</strong>
+                        <span>extra database required</span>
+                    </li>
+                    <li>
+                        <strong>0755</strong>
+                        <span>safe executable bundle modes</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="hero__visual reveal reveal--delay-1">
+                <div class="showcase">
+                    <div class="showcase__chrome">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <p>#release-war-room</p>
+                    </div>
+
+                    <div class="showcase__board">
+                        <section class="lane lane--todo">
+                            <header>
+                                <span>Todo</span>
+                                <span>2</span>
+                            </header>
+                            <article class="card card--warm">
+                                <p>Ship v0.1.2 docs refresh</p>
+                                <div class="card__meta">
+                                    <span>Due today</span>
+                                    <span>High</span>
+                                </div>
+                            </article>
+                            <article class="card">
+                                <p>Prepare release notes</p>
+                                <div class="card__meta">
+                                    <span>2 assignees</span>
+                                    <span>Docs</span>
+                                </div>
+                            </article>
+                        </section>
+
+                        <section class="lane lane--progress">
+                            <header>
+                                <span>In Progress</span>
+                                <span>3</span>
+                            </header>
+                            <article class="card card--mint">
+                                <p>Build plugin bundle</p>
+                                <div class="card__meta">
+                                    <span>Live updates</span>
+                                    <span>90%</span>
+                                </div>
+                            </article>
+                            <article class="card">
+                                <p>Review post actions</p>
+                                <div class="card__meta">
+                                    <span>@alice</span>
+                                    <span>Flow</span>
+                                </div>
+                            </article>
+                        </section>
+
+                        <section class="lane lane--done">
+                            <header>
+                                <span>Done</span>
+                                <span>4</span>
+                            </header>
+                            <article class="card card--ink">
+                                <p>Push release tag</p>
+                                <div class="card__meta">
+                                    <span>GitHub Actions</span>
+                                    <span>Done</span>
+                                </div>
+                            </article>
+                        </section>
+                    </div>
+
+                    <div class="showcase__gantt">
+                        <div class="gantt__title">
+                            <span>Gantt timeline</span>
+                            <span>Week view</span>
+                        </div>
+                        <div class="gantt__grid">
+                            <div class="gantt__labels">
+                                <span>Kickoff</span>
+                                <span>Build</span>
+                                <span>Release</span>
+                            </div>
+                            <div class="gantt__bars">
+                                <span class="bar bar--milestone"></span>
+                                <span class="bar bar--mint"></span>
+                                <span class="bar bar--coral"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <aside class="post-card">
+                        <p class="post-card__eyebrow">Flow post action</p>
+                        <h2>Due soon: Ship v0.1.2 docs refresh</h2>
+                        <div class="post-card__actions">
+                            <span>Assign to me</span>
+                            <span>Push +1 day</span>
+                            <span>Open gantt</span>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </section>
+
+        <section class="section strip reveal reveal--delay-1">
+            <p>Built on the Mattermost plugin model: custom API, KV storage, slash commands, live SSE streams, post interactions, and GitHub-ready releases.</p>
+        </section>
+
+        <section class="section" id="features">
+            <div class="section__intro reveal">
+                <p class="eyebrow">Why teams use it</p>
+                <h2>One workspace for planning, execution, and channel feedback.</h2>
+            </div>
+            <div class="feature-grid">
+                <article class="feature-card reveal">
+                    <p class="feature-card__index">01</p>
+                    <h3>Kanban and gantt stay in sync</h3>
+                    <p>Cards, dates, progress, milestones, and dependencies power both views, so teams do not maintain separate planning tools.</p>
+                </article>
+                <article class="feature-card reveal reveal--delay-1">
+                    <p class="feature-card__index">02</p>
+                    <h3>Mattermost-native collaboration</h3>
+                    <p>Use channel posts, mentions, slash commands, deep links, and quick post actions without sending people to another app.</p>
+                </article>
+                <article class="feature-card reveal reveal--delay-2">
+                    <p class="feature-card__index">03</p>
+                    <h3>Real-time board awareness</h3>
+                    <p>SSE updates and local sync keep boards, cards, gantt views, and sidebar summaries fresh across open sessions.</p>
+                </article>
+                <article class="feature-card reveal">
+                    <p class="feature-card__index">04</p>
+                    <h3>Operator-friendly deployment</h3>
+                    <p>Ship a single `.tar.gz` plugin bundle with executable-safe server binaries and tag-driven GitHub release automation.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section split-section">
+            <div class="split-card reveal">
+                <p class="eyebrow">Inside the flow</p>
+                <h2>Start in chat, land on the exact card, finish with one click.</h2>
+                <ul class="story-list">
+                    <li>A channel post announces a card movement or due-soon reminder.</li>
+                    <li>A teammate uses `Assign to me`, `Push +1 day`, or `Mark done` directly from the post.</li>
+                    <li>Open boards and sidebar summaries update without a full refresh.</li>
+                </ul>
+            </div>
+            <div class="split-card split-card--stack reveal reveal--delay-1">
+                <div class="signal">
+                    <p>Deep links</p>
+                    <strong>Board, gantt, and card URLs</strong>
+                </div>
+                <div class="signal">
+                    <p>Scope-aware assignees</p>
+                    <strong>Team and channel members only</strong>
+                </div>
+                <div class="signal">
+                    <p>Delivery hygiene</p>
+                    <strong>Checklist, dependencies, activity history</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="section" id="operators">
+            <div class="section__intro reveal">
+                <p class="eyebrow">For operators</p>
+                <h2>Designed to fit Mattermost plugin operations, not fight them.</h2>
+            </div>
+            <div class="ops-grid">
+                <article class="ops-card reveal">
+                    <h3>KV-store first</h3>
+                    <p>Boards, cards, activity, preferences, default board mappings, and due-soon state live in the Mattermost plugin KV store.</p>
+                </article>
+                <article class="ops-card reveal reveal--delay-1">
+                    <h3>Permission-aware</h3>
+                    <p>Board access respects team, channel, system admin, and board admin boundaries instead of inventing a second auth system.</p>
+                </article>
+                <article class="ops-card reveal reveal--delay-2">
+                    <h3>Release-safe packaging</h3>
+                    <p>Server binaries are bundled with executable mode `0755`, avoiding the classic plugin-start failure after extraction.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section" id="docs">
+            <div class="section__intro reveal">
+                <p class="eyebrow">Docs</p>
+                <h2>Pick the guide that matches your role.</h2>
+            </div>
+            <div class="doc-grid">
+                <a class="doc-card reveal" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noreferrer">
+                    <span>User Guide</span>
+                    <strong>How to work with boards, cards, gantt, and post actions</strong>
+                </a>
+                <a class="doc-card reveal reveal--delay-1" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/ADMIN_GUIDE.md" target="_blank" rel="noreferrer">
+                    <span>Admin Guide</span>
+                    <strong>Install, operate, troubleshoot, and roll out the plugin safely</strong>
+                </a>
+                <a class="doc-card reveal reveal--delay-2" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/DEVELOPMENT_GUIDE.md" target="_blank" rel="noreferrer">
+                    <span>Development Guide</span>
+                    <strong>Understand the API surface, KV model, SSE flows, and local workflows</strong>
+                </a>
+                <a class="doc-card reveal" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/RELEASE_GUIDE.md" target="_blank" rel="noreferrer">
+                    <span>Release Guide</span>
+                    <strong>Build, tag, publish, verify, and roll back releases with confidence</strong>
+                </a>
+            </div>
+        </section>
+
+        <section class="section install" id="install">
+            <div class="install__copy reveal">
+                <p class="eyebrow">Install</p>
+                <h2>Build locally or upload the latest release.</h2>
+                <p>
+                    Mattermost Flow ships as a standard plugin bundle, so teams can install it through Mattermost
+                    Plugin Management or distribute it through internal plugin channels.
+                </p>
+            </div>
+            <div class="install__panel reveal reveal--delay-1">
+                <pre><code>make dist
+# upload:
+dist/com.mattermost.flow-plugin-&lt;version&gt;.tar.gz</code></pre>
+                <div class="install__meta">
+                    <span>Go 1.25+</span>
+                    <span>Node 24.13.1</span>
+                    <span>GitHub Actions release automation</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="section cta reveal">
+            <div class="cta__panel">
+                <p class="eyebrow">Ready to try it?</p>
+                <h2>Bring structured delivery flow into the same place your team already talks.</h2>
+                <div class="hero__actions">
+                    <a class="button button--primary" href="https://github.com/hkjang/mattermost-flow-plugin/releases/latest" target="_blank" rel="noreferrer">Download latest release</a>
+                    <a class="button button--ghost" href="https://github.com/hkjang/mattermost-flow-plugin" target="_blank" rel="noreferrer">View repository</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>Mattermost Flow Plugin</p>
+        <p>Built for channel-native planning, execution, and release coordination.</p>
+        <p>&copy; <span id="year"></span> Mattermost Flow contributors</p>
+    </footer>
+
+    <script src="site.js"></script>
+</body>
+</html>
