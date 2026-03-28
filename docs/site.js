@@ -1,6 +1,6 @@
 const revealTargets = Array.from(document.querySelectorAll('.reveal'));
 const yearNode = document.getElementById('year');
-const assetVersion = '20260329-docs';
+const assetVersion = '20260329-docs-ko-guides';
 const repoBlobBase = 'https://github.com/hkjang/mattermost-flow-plugin/blob/main/';
 
 const translations = {
@@ -216,26 +216,50 @@ const translations = {
 
 const docDefinitions = {
     user: {
-        file: 'USER_GUIDE.md',
-        githubPath: 'docs/USER_GUIDE.md',
+        files: {
+            en: 'USER_GUIDE.md',
+            ko: 'USER_GUIDE.ko.md',
+        },
+        githubPaths: {
+            en: 'docs/USER_GUIDE.md',
+            ko: 'docs/USER_GUIDE.ko.md',
+        },
         titleKey: 'doc.user.title',
         descKey: 'doc.user.desc',
     },
     admin: {
-        file: 'ADMIN_GUIDE.md',
-        githubPath: 'docs/ADMIN_GUIDE.md',
+        files: {
+            en: 'ADMIN_GUIDE.md',
+            ko: 'ADMIN_GUIDE.ko.md',
+        },
+        githubPaths: {
+            en: 'docs/ADMIN_GUIDE.md',
+            ko: 'docs/ADMIN_GUIDE.ko.md',
+        },
         titleKey: 'doc.admin.title',
         descKey: 'doc.admin.desc',
     },
     dev: {
-        file: 'DEVELOPMENT_GUIDE.md',
-        githubPath: 'docs/DEVELOPMENT_GUIDE.md',
+        files: {
+            en: 'DEVELOPMENT_GUIDE.md',
+            ko: 'DEVELOPMENT_GUIDE.ko.md',
+        },
+        githubPaths: {
+            en: 'docs/DEVELOPMENT_GUIDE.md',
+            ko: 'docs/DEVELOPMENT_GUIDE.ko.md',
+        },
         titleKey: 'doc.dev.title',
         descKey: 'doc.dev.desc',
     },
     release: {
-        file: 'RELEASE_GUIDE.md',
-        githubPath: 'docs/RELEASE_GUIDE.md',
+        files: {
+            en: 'RELEASE_GUIDE.md',
+            ko: 'RELEASE_GUIDE.ko.md',
+        },
+        githubPaths: {
+            en: 'docs/RELEASE_GUIDE.md',
+            ko: 'docs/RELEASE_GUIDE.ko.md',
+        },
         titleKey: 'doc.release.title',
         descKey: 'doc.release.desc',
     },
@@ -260,6 +284,25 @@ function escapeAttribute(value) {
 
 function getTranslation(key) {
     return translations[currentLanguage]?.[key] || translations.en[key] || key;
+}
+
+function normalizeDocLanguage(language) {
+    return language === 'ko' ? 'ko' : 'en';
+}
+
+function getDocSource(docKey, language = currentLanguage) {
+    const definition = docDefinitions[docKey];
+    if (!definition) {
+        return null;
+    }
+
+    const normalizedLanguage = normalizeDocLanguage(language);
+
+    return {
+        file: definition.files[normalizedLanguage] || definition.files.en,
+        githubPath: definition.githubPaths[normalizedLanguage] || definition.githubPaths.en,
+        language: normalizedLanguage,
+    };
 }
 
 function resolveLanguage() {
@@ -343,7 +386,9 @@ function resolveMarkdownHref(href, currentPath) {
     const currentSegments = currentPath.split('/').slice(0, -1);
     const hrefSegments = cleanHref.startsWith('/') ? cleanHref.slice(1).split('/') : cleanHref.split('/');
     const resolvedPath = normalizePathSegments([...currentSegments, ...hrefSegments]).join('/');
-    const matchingDocEntry = Object.entries(docDefinitions).find(([, definition]) => definition.githubPath === resolvedPath);
+    const matchingDocEntry = Object.entries(docDefinitions).find(([, definition]) => (
+        Object.values(definition.githubPaths).includes(resolvedPath)
+    ));
 
     if (matchingDocEntry) {
         return {
@@ -482,6 +527,7 @@ function renderMarkdown(markdown, currentPath) {
 
 function updateDocViewerMeta(docKey) {
     const definition = docDefinitions[docKey];
+    const source = getDocSource(docKey);
     if (!definition) {
         return;
     }
@@ -499,12 +545,12 @@ function updateDocViewerMeta(docKey) {
         descriptionNode.textContent = getTranslation(definition.descKey);
     }
 
-    if (fileLink) {
-        fileLink.href = `${definition.file}?v=${assetVersion}`;
+    if (fileLink && source) {
+        fileLink.href = `${source.file}?v=${assetVersion}`;
     }
 
-    if (githubLink) {
-        githubLink.href = `${repoBlobBase}${definition.githubPath}`;
+    if (githubLink && source) {
+        githubLink.href = `${repoBlobBase}${source.githubPath}`;
     }
 }
 
@@ -517,24 +563,43 @@ function updateDocTabs() {
 }
 
 async function loadDoc(docKey) {
-    const definition = docDefinitions[docKey];
-    if (!definition) {
+    const preferredSource = getDocSource(docKey);
+    if (!preferredSource) {
         return null;
     }
 
-    if (docCache.has(docKey)) {
-        return docCache.get(docKey);
+    const cacheKey = `${preferredSource.language}:${docKey}`;
+    if (docCache.has(cacheKey)) {
+        return docCache.get(cacheKey);
     }
 
-    const response = await fetch(`${definition.file}?v=${assetVersion}`, {cache: 'no-store'});
-    if (!response.ok) {
-        throw new Error(`Failed to fetch ${definition.file}`);
+    const sourcesToTry = [preferredSource];
+    if (preferredSource.language !== 'en') {
+        const fallbackSource = getDocSource(docKey, 'en');
+        if (fallbackSource) {
+            sourcesToTry.push(fallbackSource);
+        }
     }
 
-    const markdown = await response.text();
-    const rendered = renderMarkdown(markdown, definition.githubPath);
-    docCache.set(docKey, rendered);
-    return rendered;
+    let lastError = null;
+
+    for (const source of sourcesToTry) {
+        try {
+            const response = await fetch(`${source.file}?v=${assetVersion}`, {cache: 'no-store'});
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${source.file}`);
+            }
+
+            const markdown = await response.text();
+            const rendered = renderMarkdown(markdown, source.githubPath);
+            docCache.set(cacheKey, rendered);
+            return rendered;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error(`Failed to fetch document for ${docKey}`);
 }
 
 async function showDoc(docKey) {
