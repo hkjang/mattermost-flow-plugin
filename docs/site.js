@@ -1,5 +1,7 @@
 const revealTargets = Array.from(document.querySelectorAll('.reveal'));
 const yearNode = document.getElementById('year');
+const assetVersion = '20260329-docs';
+const repoBlobBase = 'https://github.com/hkjang/mattermost-flow-plugin/blob/main/';
 
 const translations = {
     en: {
@@ -84,6 +86,12 @@ const translations = {
         'ops.3.desc': 'Server binaries are bundled with executable mode `0755`, avoiding the classic plugin-start failure after extraction.',
         'docs.eyebrow': 'Docs',
         'docs.title': 'Pick the guide that matches your role.',
+        'docs.desc': 'Read the project guides directly on this page, then open the source markdown only when you need it.',
+        'docs.inlineLabel': 'Inline markdown viewer',
+        'docs.loading': 'Loading guide...',
+        'docs.failed': 'Could not load the selected guide. You can still open the markdown source.',
+        'docs.openFile': 'Open markdown',
+        'docs.openGithub': 'Open on GitHub',
         'doc.user.title': 'User Guide',
         'doc.user.desc': 'How to work with boards, cards, gantt, and post actions',
         'doc.admin.title': 'Admin Guide',
@@ -182,6 +190,12 @@ const translations = {
         'ops.3.desc': '서버 바이너리를 `0755` 실행 권한으로 묶어 압축 해제 후 플러그인이 실행되지 않는 고전적인 문제를 피합니다.',
         'docs.eyebrow': '문서',
         'docs.title': '역할에 맞는 가이드를 바로 고르세요.',
+        'docs.desc': '프로젝트 가이드를 이 페이지에서 바로 읽고, 필요할 때만 원본 Markdown을 열 수 있습니다.',
+        'docs.inlineLabel': '인라인 Markdown 뷰어',
+        'docs.loading': '가이드를 불러오는 중입니다...',
+        'docs.failed': '선택한 가이드를 불러오지 못했습니다. 대신 원본 Markdown을 열 수 있습니다.',
+        'docs.openFile': 'Markdown 열기',
+        'docs.openGithub': 'GitHub에서 열기',
         'doc.user.title': '사용자 가이드',
         'doc.user.desc': '보드, 카드, 간트, 포스트 액션 사용법',
         'doc.admin.title': '관리자 가이드',
@@ -200,6 +214,54 @@ const translations = {
     },
 };
 
+const docDefinitions = {
+    user: {
+        file: 'USER_GUIDE.md',
+        githubPath: 'docs/USER_GUIDE.md',
+        titleKey: 'doc.user.title',
+        descKey: 'doc.user.desc',
+    },
+    admin: {
+        file: 'ADMIN_GUIDE.md',
+        githubPath: 'docs/ADMIN_GUIDE.md',
+        titleKey: 'doc.admin.title',
+        descKey: 'doc.admin.desc',
+    },
+    dev: {
+        file: 'DEVELOPMENT_GUIDE.md',
+        githubPath: 'docs/DEVELOPMENT_GUIDE.md',
+        titleKey: 'doc.dev.title',
+        descKey: 'doc.dev.desc',
+    },
+    release: {
+        file: 'RELEASE_GUIDE.md',
+        githubPath: 'docs/RELEASE_GUIDE.md',
+        titleKey: 'doc.release.title',
+        descKey: 'doc.release.desc',
+    },
+};
+
+const docCache = new Map();
+let currentLanguage = 'en';
+let activeDocKey = 'user';
+
+function escapeHTML(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeAttribute(value) {
+    return escapeHTML(value);
+}
+
+function getTranslation(key) {
+    return translations[currentLanguage]?.[key] || translations.en[key] || key;
+}
+
 function resolveLanguage() {
     const params = new URLSearchParams(window.location.search);
     const forced = (params.get('lang') || '').toLowerCase();
@@ -212,12 +274,12 @@ function resolveLanguage() {
 }
 
 function translatePage(language) {
+    currentLanguage = language;
     const dictionary = translations[language] || translations.en;
     const fallback = translations.en;
 
     document.documentElement.lang = language;
     document.documentElement.dataset.language = language;
-
     document.title = dictionary['meta.title'] || fallback['meta.title'];
 
     const metaDescription = document.getElementById('meta-description');
@@ -253,28 +315,309 @@ function translatePage(language) {
     });
 }
 
+function normalizePathSegments(segments) {
+    const normalized = [];
+    segments.forEach((segment) => {
+        if (!segment || segment === '.') {
+            return;
+        }
+        if (segment === '..') {
+            normalized.pop();
+            return;
+        }
+        normalized.push(segment);
+    });
+    return normalized;
+}
+
+function resolveMarkdownHref(href, currentPath) {
+    if (!href) {
+        return {type: 'external', href: '#'};
+    }
+
+    if (/^(https?:|mailto:|#)/i.test(href)) {
+        return {type: 'external', href};
+    }
+
+    const cleanHref = href.split('#')[0].split('?')[0];
+    const currentSegments = currentPath.split('/').slice(0, -1);
+    const hrefSegments = cleanHref.startsWith('/') ? cleanHref.slice(1).split('/') : cleanHref.split('/');
+    const resolvedPath = normalizePathSegments([...currentSegments, ...hrefSegments]).join('/');
+    const matchingDocEntry = Object.entries(docDefinitions).find(([, definition]) => definition.githubPath === resolvedPath);
+
+    if (matchingDocEntry) {
+        return {
+            type: 'inline',
+            docKey: matchingDocEntry[0],
+        };
+    }
+
+    return {
+        type: 'external',
+        href: `${repoBlobBase}${resolvedPath}`,
+    };
+}
+
+function renderInline(text, currentPath) {
+    const escaped = escapeHTML(text);
+
+    return escaped
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
+            const resolved = resolveMarkdownHref(href, currentPath);
+            if (resolved.type === 'inline' && resolved.docKey) {
+                return `<a href="#docs" data-inline-doc="${escapeAttribute(resolved.docKey)}">${label}</a>`;
+            }
+            return `<a href="${escapeAttribute(resolved.href)}" target="_blank" rel="noreferrer">${label}</a>`;
+        })
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+function renderMarkdown(markdown, currentPath) {
+    const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+    const html = [];
+    let paragraph = [];
+    let listItems = [];
+    let listType = '';
+    let inCodeBlock = false;
+    let codeLines = [];
+
+    const flushParagraph = () => {
+        if (paragraph.length === 0) {
+            return;
+        }
+        html.push(`<p>${renderInline(paragraph.join(' '), currentPath)}</p>`);
+        paragraph = [];
+    };
+
+    const flushList = () => {
+        if (listItems.length === 0 || !listType) {
+            return;
+        }
+        const items = listItems.map((item) => `<li>${renderInline(item, currentPath)}</li>`).join('');
+        html.push(`<${listType}>${items}</${listType}>`);
+        listItems = [];
+        listType = '';
+    };
+
+    const flushCode = () => {
+        if (codeLines.length === 0) {
+            html.push('<pre><code></code></pre>');
+        } else {
+            html.push(`<pre><code>${escapeHTML(codeLines.join('\n'))}</code></pre>`);
+        }
+        codeLines = [];
+    };
+
+    lines.forEach((line) => {
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith('```')) {
+            flushParagraph();
+            flushList();
+            if (inCodeBlock) {
+                flushCode();
+                inCodeBlock = false;
+            } else {
+                inCodeBlock = true;
+                codeLines = [];
+            }
+            return;
+        }
+
+        if (inCodeBlock) {
+            codeLines.push(line);
+            return;
+        }
+
+        if (!trimmed) {
+            flushParagraph();
+            flushList();
+            return;
+        }
+
+        const headingMatch = /^(#{1,4})\s+(.*)$/.exec(trimmed);
+        if (headingMatch) {
+            flushParagraph();
+            flushList();
+            const level = Math.min(headingMatch[1].length, 4);
+            html.push(`<h${level}>${renderInline(headingMatch[2], currentPath)}</h${level}>`);
+            return;
+        }
+
+        const orderedMatch = /^\d+\.\s+(.*)$/.exec(trimmed);
+        if (orderedMatch) {
+            flushParagraph();
+            if (listType && listType !== 'ol') {
+                flushList();
+            }
+            listType = 'ol';
+            listItems.push(orderedMatch[1]);
+            return;
+        }
+
+        const unorderedMatch = /^-\s+(.*)$/.exec(trimmed);
+        if (unorderedMatch) {
+            flushParagraph();
+            if (listType && listType !== 'ul') {
+                flushList();
+            }
+            listType = 'ul';
+            listItems.push(unorderedMatch[1]);
+            return;
+        }
+
+        paragraph.push(trimmed);
+    });
+
+    flushParagraph();
+    flushList();
+
+    if (inCodeBlock) {
+        flushCode();
+    }
+
+    return html.join('\n');
+}
+
+function updateDocViewerMeta(docKey) {
+    const definition = docDefinitions[docKey];
+    if (!definition) {
+        return;
+    }
+
+    const titleNode = document.getElementById('doc-viewer-title');
+    const descriptionNode = document.getElementById('doc-viewer-description');
+    const fileLink = document.getElementById('doc-viewer-file');
+    const githubLink = document.getElementById('doc-viewer-github');
+
+    if (titleNode) {
+        titleNode.textContent = getTranslation(definition.titleKey);
+    }
+
+    if (descriptionNode) {
+        descriptionNode.textContent = getTranslation(definition.descKey);
+    }
+
+    if (fileLink) {
+        fileLink.href = `${definition.file}?v=${assetVersion}`;
+    }
+
+    if (githubLink) {
+        githubLink.href = `${repoBlobBase}${definition.githubPath}`;
+    }
+}
+
+function updateDocTabs() {
+    document.querySelectorAll('.doc-tab').forEach((tab) => {
+        const isActive = tab.getAttribute('data-doc') === activeDocKey;
+        tab.classList.toggle('is-active', isActive);
+        tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+}
+
+async function loadDoc(docKey) {
+    const definition = docDefinitions[docKey];
+    if (!definition) {
+        return null;
+    }
+
+    if (docCache.has(docKey)) {
+        return docCache.get(docKey);
+    }
+
+    const response = await fetch(`${definition.file}?v=${assetVersion}`, {cache: 'no-store'});
+    if (!response.ok) {
+        throw new Error(`Failed to fetch ${definition.file}`);
+    }
+
+    const markdown = await response.text();
+    const rendered = renderMarkdown(markdown, definition.githubPath);
+    docCache.set(docKey, rendered);
+    return rendered;
+}
+
+async function showDoc(docKey) {
+    const viewerBody = document.getElementById('doc-viewer-body');
+    if (!viewerBody || !docDefinitions[docKey]) {
+        return;
+    }
+
+    activeDocKey = docKey;
+    updateDocTabs();
+    updateDocViewerMeta(docKey);
+    viewerBody.innerHTML = `<p class="markdown-body__state">${escapeHTML(getTranslation('docs.loading'))}</p>`;
+
+    try {
+        const html = await loadDoc(docKey);
+        viewerBody.innerHTML = html || `<p class="markdown-body__state">${escapeHTML(getTranslation('docs.loading'))}</p>`;
+    } catch (_error) {
+        viewerBody.innerHTML = `<p class="markdown-body__state">${escapeHTML(getTranslation('docs.failed'))}</p>`;
+    }
+}
+
+function initDocViewer() {
+    const viewerBody = document.getElementById('doc-viewer-body');
+    if (!viewerBody) {
+        return;
+    }
+
+    document.querySelectorAll('.doc-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            const docKey = tab.getAttribute('data-doc');
+            if (!docKey || !docDefinitions[docKey]) {
+                return;
+            }
+            void showDoc(docKey);
+        });
+    });
+
+    viewerBody.addEventListener('click', (event) => {
+        const link = event.target instanceof HTMLElement ? event.target.closest('[data-inline-doc]') : null;
+        if (!link) {
+            return;
+        }
+        event.preventDefault();
+        const docKey = link.getAttribute('data-inline-doc');
+        if (!docKey || !docDefinitions[docKey]) {
+            return;
+        }
+        void showDoc(docKey);
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const requestedDoc = params.get('doc');
+    const initialDocKey = requestedDoc && docDefinitions[requestedDoc] ? requestedDoc : activeDocKey;
+    void showDoc(initialDocKey);
+}
+
+function initRevealAnimations() {
+    if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries, currentObserver) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) {
+                    return;
+                }
+
+                entry.target.classList.add('is-visible');
+                currentObserver.unobserve(entry.target);
+            });
+        }, {
+            threshold: 0.18,
+            rootMargin: '0px 0px -6% 0px',
+        });
+
+        revealTargets.forEach((node) => observer.observe(node));
+        return;
+    }
+
+    revealTargets.forEach((node) => node.classList.add('is-visible'));
+}
+
 if (yearNode) {
     yearNode.textContent = String(new Date().getFullYear());
 }
 
 translatePage(resolveLanguage());
-
-if ('IntersectionObserver' in window) {
-    const observer = new IntersectionObserver((entries, currentObserver) => {
-        entries.forEach((entry) => {
-            if (!entry.isIntersecting) {
-                return;
-            }
-
-            entry.target.classList.add('is-visible');
-            currentObserver.unobserve(entry.target);
-        });
-    }, {
-        threshold: 0.18,
-        rootMargin: '0px 0px -6% 0px',
-    });
-
-    revealTargets.forEach((node) => observer.observe(node));
-} else {
-    revealTargets.forEach((node) => node.classList.add('is-visible'));
-}
+initDocViewer();
+initRevealAnimations();

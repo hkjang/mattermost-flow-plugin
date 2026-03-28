@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="site.css?v=20260329">
+    <link rel="stylesheet" href="site.css?v=20260329-docs">
 </head>
 <body>
     <div class="site-bg" aria-hidden="true">
@@ -262,24 +262,43 @@
             <div class="section__intro reveal">
                 <p class="eyebrow" data-i18n="docs.eyebrow">Docs</p>
                 <h2 data-i18n="docs.title">Pick the guide that matches your role.</h2>
+                <p data-i18n="docs.desc">Read the project guides directly on this page, then open the source markdown only when you need it.</p>
             </div>
-            <div class="doc-grid">
-                <a class="doc-card reveal" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noreferrer">
-                    <span data-i18n="doc.user.title">User Guide</span>
-                    <strong data-i18n="doc.user.desc">How to work with boards, cards, gantt, and post actions</strong>
-                </a>
-                <a class="doc-card reveal reveal--delay-1" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/ADMIN_GUIDE.md" target="_blank" rel="noreferrer">
-                    <span data-i18n="doc.admin.title">Admin Guide</span>
-                    <strong data-i18n="doc.admin.desc">Install, operate, troubleshoot, and roll out the plugin safely</strong>
-                </a>
-                <a class="doc-card reveal reveal--delay-2" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/DEVELOPMENT_GUIDE.md" target="_blank" rel="noreferrer">
-                    <span data-i18n="doc.dev.title">Development Guide</span>
-                    <strong data-i18n="doc.dev.desc">Understand the API surface, KV model, SSE flows, and local workflows</strong>
-                </a>
-                <a class="doc-card reveal" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/RELEASE_GUIDE.md" target="_blank" rel="noreferrer">
-                    <span data-i18n="doc.release.title">Release Guide</span>
-                    <strong data-i18n="doc.release.desc">Build, tag, publish, verify, and roll back releases with confidence</strong>
-                </a>
+            <div class="doc-shell reveal">
+                <div class="doc-tabs" role="tablist" aria-label="Project guides">
+                    <button class="doc-tab is-active" type="button" data-doc="user" role="tab" aria-selected="true">
+                        <span data-i18n="doc.user.title">User Guide</span>
+                        <strong data-i18n="doc.user.desc">How to work with boards, cards, gantt, and post actions</strong>
+                    </button>
+                    <button class="doc-tab" type="button" data-doc="admin" role="tab" aria-selected="false">
+                        <span data-i18n="doc.admin.title">Admin Guide</span>
+                        <strong data-i18n="doc.admin.desc">Install, operate, troubleshoot, and roll out the plugin safely</strong>
+                    </button>
+                    <button class="doc-tab" type="button" data-doc="dev" role="tab" aria-selected="false">
+                        <span data-i18n="doc.dev.title">Development Guide</span>
+                        <strong data-i18n="doc.dev.desc">Understand the API surface, KV model, SSE flows, and local workflows</strong>
+                    </button>
+                    <button class="doc-tab" type="button" data-doc="release" role="tab" aria-selected="false">
+                        <span data-i18n="doc.release.title">Release Guide</span>
+                        <strong data-i18n="doc.release.desc">Build, tag, publish, verify, and roll back releases with confidence</strong>
+                    </button>
+                </div>
+                <article class="doc-viewer">
+                    <div class="doc-viewer__header">
+                        <div>
+                            <p class="eyebrow doc-viewer__eyebrow" data-i18n="docs.inlineLabel">Inline markdown viewer</p>
+                            <h3 id="doc-viewer-title">User Guide</h3>
+                            <p id="doc-viewer-description">How to work with boards, cards, gantt, and post actions</p>
+                        </div>
+                        <div class="doc-viewer__actions">
+                            <a class="button button--ghost" id="doc-viewer-file" href="USER_GUIDE.md" target="_blank" rel="noreferrer" data-i18n="docs.openFile">Open markdown</a>
+                            <a class="button button--ghost" id="doc-viewer-github" href="https://github.com/hkjang/mattermost-flow-plugin/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noreferrer" data-i18n="docs.openGithub">Open on GitHub</a>
+                        </div>
+                    </div>
+                    <div class="doc-viewer__body markdown-body" id="doc-viewer-body" data-i18n-loading="docs.loading">
+                        <p>Loading guide...</p>
+                    </div>
+                </article>
             </div>
         </section>
 
@@ -322,6 +341,6 @@ dist/com.mattermost.flow-plugin-&lt;version&gt;.tar.gz</code></pre>
         <p>&copy; <span id="year"></span> Mattermost Flow contributors</p>
     </footer>
 
-    <script src="site.js?v=20260329"></script>
+    <script src="site.js?v=20260329-docs"></script>
 </body>
 </html>
