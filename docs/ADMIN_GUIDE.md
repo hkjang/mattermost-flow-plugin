@@ -61,6 +61,7 @@ Flow stores operational data in the Mattermost plugin KV store:
 - User preferences
 - Channel default board mappings
 - Due-soon notification state
+- Calendar feed tokens
 
 No external database is required for the current plugin design.
 
@@ -73,9 +74,22 @@ Available board-level settings include:
 - `post_updates`
 - `post_due_soon`
 - `allow_mentions`
+- `calendar_feed_enabled`
 - `default_view`
 
 Due-soon scanning runs as a background cluster job on an hourly interval.
+
+### Board Diagnostics
+
+Board owners can open `Board settings` and use the diagnostics panel to inspect:
+
+- Missing column references on cards
+- Invalid card date ranges
+- Duplicate manual card positions inside a column
+- Dependencies pointing to missing cards
+- Self-referencing dependencies
+
+If the report marks `Reindex cards` as available, the repair action will safely normalize card ordering and move orphaned cards into the first valid column.
 
 ### Executable Permissions in Release Bundles
 
@@ -86,8 +100,10 @@ Release archives are packaged so that files under `server/dist/` are stored with
 1. Install the plugin in a staging Mattermost instance.
 2. Create one team board and one channel board.
 3. Verify board view, gantt view, slash commands, and channel posts.
-4. Enable the plugin in production.
-5. Share user guidance and preferred board conventions with team owners.
+4. Open board settings and confirm diagnostics look healthy.
+5. If you use external calendars, validate the `.ics` download and subscription URL.
+6. Enable the plugin in production.
+7. Share user guidance and preferred board conventions with team owners.
 
 ## Upgrade and Rollback
 
@@ -118,6 +134,16 @@ Because Flow stores data in KV, keep plugin versions reasonably close when rolli
 ### Quick actions do not mention assignees
 
 - Confirm `allow_mentions` is enabled in board settings
+
+### Diagnostics show orphan cards or duplicate positions
+
+- Run `Reindex cards` from the diagnostics panel
+- Review recent column changes or manual data edits that may have caused drift
+
+### Calendar subscription links do not work
+
+- Confirm `calendar_feed_enabled` is enabled in board settings
+- If an old shared link should stop working, rotate the token in board settings and distribute the new link
 
 ## Related Documents
 

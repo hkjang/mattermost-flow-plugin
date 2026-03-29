@@ -32,6 +32,7 @@ import {
 import type {
     Activity,
     BoardCalendarFeedInfo,
+    BoardDiagnosticsReport,
     BoardBundle,
     BoardColumn,
     BoardFilters,
@@ -135,6 +136,8 @@ export function FlowPage({context}: FlowPageProps) {
     const [ganttDrag, setGanttDrag] = useState<GanttDragState | null>(null);
     const [usersById, setUsersById] = useState<Record<string, FlowUser>>({});
     const [calendarFeedInfo, setCalendarFeedInfo] = useState<BoardCalendarFeedInfo | null>(null);
+    const [boardDiagnostics, setBoardDiagnostics] = useState<BoardDiagnosticsReport | null>(null);
+    const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
     const liveRefreshTimerRef = useRef<number | null>(null);
     const pendingStreamEventsRef = useRef<Record<string, number>>({});
 
@@ -238,6 +241,7 @@ export function FlowPage({context}: FlowPageProps) {
         setNewCardAssigneeIds([]);
         setNewCardTemplateId('');
         setCalendarFeedInfo(null);
+        setBoardDiagnostics(null);
     }, [selectedBoardId]);
 
     useEffect(() => {
@@ -357,6 +361,32 @@ export function FlowPage({context}: FlowPageProps) {
             active = false;
         };
     }, [boardSettingsOpen, selectedBoard?.id, selectedBoard?.settings.calendar_feed_enabled]);
+
+    useEffect(() => {
+        if (!boardSettingsOpen || !selectedBoard) {
+            return;
+        }
+
+        let active = true;
+        setLoadingDiagnostics(true);
+        void flowClient.getBoardDiagnostics(selectedBoard.id).then((response) => {
+            if (active) {
+                setBoardDiagnostics(response);
+            }
+        }).catch(() => {
+            if (active) {
+                setBoardDiagnostics(null);
+            }
+        }).finally(() => {
+            if (active) {
+                setLoadingDiagnostics(false);
+            }
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [boardSettingsOpen, selectedBoard?.id]);
 
     useEffect(() => {
         if (!selectedBoardId || !boardData || boardData.board.id !== selectedBoardId) {
@@ -935,6 +965,26 @@ export function FlowPage({context}: FlowPageProps) {
         }
     }
 
+    async function repairBoardDiagnostics() {
+        if (!selectedBoard) {
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const response = await flowClient.repairBoardDiagnostics(selectedBoard.id);
+            setBoardDiagnostics(response);
+            await refreshBoard();
+            await refreshBoardList();
+            rememberLocalEvent(selectedBoard.id, 'board.reindexed');
+            setNotice(response.healthy ? 'Board diagnostics repaired and now look healthy.' : 'Board repair completed. Review remaining diagnostic warnings.');
+        } catch (repairError) {
+            setError(getErrorMessage(repairError));
+        } finally {
+            setSaving(false);
+        }
+    }
+
     function copyBoardLink(nextView: 'board' | 'gantt' | 'dashboard') {
         if (!selectedBoardId) {
             return;
@@ -1063,7 +1113,7 @@ export function FlowPage({context}: FlowPageProps) {
                     <form className='flow-settings' onSubmit={updateBoardSettings}>
                         <div className='flow-settings__header'>
                             <strong>Board settings</strong>
-                            <span>Columns, notifications, default view, and templates</span>
+                            <span>Columns, notifications, calendar, diagnostics, default view, and templates</span>
                         </div>
                         <div className='flow-settings__grid'>
                             <label>
@@ -1119,6 +1169,59 @@ export function FlowPage({context}: FlowPageProps) {
                                         {calendarFeedInfo?.updated_at ? <span>Last rotated {formatDateTime(calendarFeedInfo.updated_at)}</span> : <span>Save settings to mint the first token.</span>}
                                     </div>
                                 </div>
+                            )}
+                        </div>
+                        <div className='flow-diagnostics-panel'>
+                            <div className='flow-template-editor__header'>
+                                <div>
+                                    <strong>Board diagnostics</strong>
+                                    <span>Check data consistency, dependency hygiene, and ordering issues before they become support problems.</span>
+                                </div>
+                                <div className='flow-calendar-panel__actions'>
+                                    <button className='flow-button' type='button' onClick={repairBoardDiagnostics} disabled={!boardDiagnostics?.repair_available || saving}>Reindex cards</button>
+                                </div>
+                            </div>
+                            {loadingDiagnostics && <div className='flow-empty'>Loading diagnostics.</div>}
+                            {!loadingDiagnostics && boardDiagnostics && (
+                                <>
+                                    <div className='flow-diagnostics-panel__summary'>
+                                        <article className={`flow-diagnostics-panel__metric ${boardDiagnostics.healthy ? 'is-healthy' : 'is-warning'}`}>
+                                            <strong>{boardDiagnostics.healthy ? 'Healthy' : `${boardDiagnostics.issues.length} issue${boardDiagnostics.issues.length === 1 ? '' : 's'}`}</strong>
+                                            <span>{boardDiagnostics.healthy ? 'No consistency issues detected.' : 'Review warnings and repair options below.'}</span>
+                                        </article>
+                                        <article className='flow-diagnostics-panel__metric'>
+                                            <strong>{boardDiagnostics.summary.cards}</strong>
+                                            <span>Cards across {boardDiagnostics.summary.columns} columns</span>
+                                        </article>
+                                        <article className='flow-diagnostics-panel__metric'>
+                                            <strong>{boardDiagnostics.summary.dependencies}</strong>
+                                            <span>Dependencies, {boardDiagnostics.summary.invalid_dates} invalid date ranges</span>
+                                        </article>
+                                        <article className='flow-diagnostics-panel__metric'>
+                                            <strong>{boardDiagnostics.summary.overdue_cards}</strong>
+                                            <span>Overdue open cards, {boardDiagnostics.summary.comments} comments</span>
+                                        </article>
+                                    </div>
+                                    <div className='flow-diagnostics-panel__meta'>
+                                        <span>Last checked {formatDateTime(boardDiagnostics.generated_at)}</span>
+                                        {boardDiagnostics.repair_available ? <span>Automatic repair can safely normalize card ordering and move orphan cards into the first column.</span> : <span>No automatic repair action is currently needed.</span>}
+                                    </div>
+                                    <div className='flow-diagnostics-panel__issues'>
+                                        {boardDiagnostics.issues.length === 0 && <div className='flow-empty'>No diagnostic issues detected.</div>}
+                                        {boardDiagnostics.issues.map((issue) => (
+                                            <article className={`flow-diagnostics-panel__issue flow-diagnostics-panel__issue--${issue.severity}`} key={issue.code}>
+                                                <div className='flow-diagnostics-panel__issue-header'>
+                                                    <strong>{issue.title}</strong>
+                                                    <span>{issue.count} affected</span>
+                                                </div>
+                                                <p>{issue.detail}</p>
+                                                {issue.entity_ids && issue.entity_ids.length > 0 && (
+                                                    <small>{issue.entity_type || 'entity'} IDs: {issue.entity_ids.slice(0, 4).join(', ')}{issue.entity_ids.length > 4 ? '...' : ''}</small>
+                                                )}
+                                            </article>
+                                        ))}
+                                    </div>
+                                </>
                             )}
                         </div>
                         <div className='flow-template-editor'>
@@ -2130,6 +2233,10 @@ function describeBoardActivity(activity: Activity) {
         return 'Board created';
     case 'board.updated':
         return 'Board settings updated';
+    case 'board.reindexed':
+        return 'Board cards reindexed';
+    case 'board.calendar.rotated':
+        return 'Calendar token rotated';
     case 'card.created':
         return 'New card added';
     case 'card.updated':

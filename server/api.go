@@ -30,6 +30,8 @@ func (p *Plugin) initRouter() *mux.Router {
 	apiRouter.HandleFunc("/boards/{id}", p.handleDeleteBoard).Methods(http.MethodDelete)
 	apiRouter.HandleFunc("/boards/{id}/calendar-feed", p.handleGetBoardCalendarFeed).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}/calendar-feed/rotate", p.handleRotateBoardCalendarFeed).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/boards/{id}/diagnostics", p.handleGetBoardDiagnostics).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/boards/{id}/diagnostics/repair", p.handleRepairBoardDiagnostics).Methods(http.MethodPost)
 	apiRouter.HandleFunc("/boards/{id}/calendar.ics", p.handleAuthenticatedBoardCalendarICS).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}/stream", p.handleBoardStream).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}/cards", p.handleListCards).Methods(http.MethodGet)
@@ -285,6 +287,63 @@ func (p *Plugin) handleAuthenticatedBoardCalendarICS(w http.ResponseWriter, r *h
 	if err := p.writeBoardCalendarICS(w, board); err != nil {
 		p.writeError(w, err)
 	}
+}
+
+func (p *Plugin) handleGetBoardDiagnostics(w http.ResponseWriter, r *http.Request) {
+	userID := p.getUserID(r)
+	boardID := mux.Vars(r)["id"]
+
+	board, err := p.service.GetBoard(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+	if err := p.authorizeBoard(userID, board, true); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	report, err := p.service.GetBoardDiagnostics(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	p.writeJSON(w, http.StatusOK, report)
+}
+
+func (p *Plugin) handleRepairBoardDiagnostics(w http.ResponseWriter, r *http.Request) {
+	userID := p.getUserID(r)
+	boardID := mux.Vars(r)["id"]
+
+	board, err := p.service.GetBoard(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+	if err := p.authorizeBoard(userID, board, true); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	report, err := p.service.RepairBoard(userID, boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	board, err = p.service.GetBoard(boardID)
+	if err == nil {
+		p.publishBoardEvent(BoardStreamEvent{
+			BoardID:    boardID,
+			EntityType: "board",
+			Action:     "board.reindexed",
+			ActorID:    userID,
+			Board:      &board,
+		})
+	}
+
+	p.writeJSON(w, http.StatusOK, report)
 }
 
 func (p *Plugin) handlePublicBoardCalendarICS(w http.ResponseWriter, r *http.Request) {

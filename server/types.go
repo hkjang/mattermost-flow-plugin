@@ -172,6 +172,38 @@ type BoardCalendarFeedInfo struct {
 	UpdatedAt    int64  `json:"updated_at,omitempty"`
 }
 
+type BoardDiagnosticsSummary struct {
+	Columns        int `json:"columns"`
+	Cards          int `json:"cards"`
+	Templates      int `json:"templates"`
+	Dependencies   int `json:"dependencies"`
+	Activities     int `json:"activities"`
+	Comments       int `json:"comments"`
+	Milestones     int `json:"milestones"`
+	ScheduledCards int `json:"scheduled_cards"`
+	OverdueCards   int `json:"overdue_cards"`
+	InvalidDates   int `json:"invalid_dates"`
+}
+
+type BoardDiagnosticsIssue struct {
+	Code       string   `json:"code"`
+	Severity   string   `json:"severity"`
+	Title      string   `json:"title"`
+	Detail     string   `json:"detail"`
+	EntityIDs  []string `json:"entity_ids,omitempty"`
+	EntityType string   `json:"entity_type,omitempty"`
+	Count      int      `json:"count"`
+}
+
+type BoardDiagnosticsReport struct {
+	BoardID         string                  `json:"board_id"`
+	GeneratedAt     int64                   `json:"generated_at"`
+	Summary         BoardDiagnosticsSummary `json:"summary"`
+	Issues          []BoardDiagnosticsIssue `json:"issues"`
+	Healthy         bool                    `json:"healthy"`
+	RepairAvailable bool                    `json:"repair_available"`
+}
+
 type BoardFilters struct {
 	Query      string `json:"query"`
 	AssigneeID string `json:"assignee_id"`

@@ -83,6 +83,8 @@ make logs
 - `DELETE /boards/{id}`
 - `GET /boards/{id}/calendar-feed`
 - `POST /boards/{id}/calendar-feed/rotate`
+- `GET /boards/{id}/diagnostics`
+- `POST /boards/{id}/diagnostics/repair`
 - `GET /boards/{id}/calendar.ics`
 - `GET /boards/{id}/stream`
 - `GET /boards/summary/stream`

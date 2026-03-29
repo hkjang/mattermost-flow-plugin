@@ -2,6 +2,7 @@ import manifest from './manifest';
 
 import type {
     BoardCalendarFeedInfo,
+    BoardDiagnosticsReport,
     BoardBundle,
     BoardSummary,
     CardMoveResult,
@@ -101,6 +102,14 @@ export const flowClient = {
     },
     rotateBoardCalendarFeed(boardId: string) {
         return request<BoardCalendarFeedInfo>(`/boards/${boardId}/calendar-feed/rotate`, {
+            method: 'POST',
+        });
+    },
+    getBoardDiagnostics(boardId: string) {
+        return request<BoardDiagnosticsReport>(`/boards/${boardId}/diagnostics`);
+    },
+    repairBoardDiagnostics(boardId: string) {
+        return request<BoardDiagnosticsReport>(`/boards/${boardId}/diagnostics/repair`, {
             method: 'POST',
         });
     },

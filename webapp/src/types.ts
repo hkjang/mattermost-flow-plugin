@@ -156,6 +156,38 @@ export type BoardCalendarFeedInfo = {
     updated_at?: number;
 };
 
+export type BoardDiagnosticsSummary = {
+    columns: number;
+    cards: number;
+    templates: number;
+    dependencies: number;
+    activities: number;
+    comments: number;
+    milestones: number;
+    scheduled_cards: number;
+    overdue_cards: number;
+    invalid_dates: number;
+};
+
+export type BoardDiagnosticsIssue = {
+    code: string;
+    severity: 'warning' | 'error';
+    title: string;
+    detail: string;
+    entity_ids?: string[];
+    entity_type?: string;
+    count: number;
+};
+
+export type BoardDiagnosticsReport = {
+    board_id: string;
+    generated_at: number;
+    summary: BoardDiagnosticsSummary;
+    issues: BoardDiagnosticsIssue[];
+    healthy: boolean;
+    repair_available: boolean;
+};
+
 export type BoardBundle = {
     board: Board;
     columns: BoardColumn[];

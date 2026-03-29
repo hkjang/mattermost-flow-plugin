@@ -983,6 +983,87 @@ func (s *FlowService) RotateBoardCalendarFeed(boardID, actorID string) (BoardCal
 	return feed, nil
 }
 
+func (s *FlowService) GetBoardDiagnostics(boardID string) (BoardDiagnosticsReport, error) {
+	board, err := s.store.GetBoard(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+	columns, err := s.store.GetColumns(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+	templates, err := s.store.GetTemplates(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+	cards, err := s.store.ListCards(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+	dependencies, err := s.store.ListDependencies(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+	activity, err := s.store.ListActivity(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+
+	return buildBoardDiagnosticsReport(board, columns, templates, cards, dependencies, activity), nil
+}
+
+func (s *FlowService) RepairBoard(actorID, boardID string) (BoardDiagnosticsReport, error) {
+	board, err := s.store.GetBoard(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+	columns, err := s.store.GetColumns(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+	cards, err := s.store.ListCards(boardID)
+	if err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+	if len(columns) == 0 {
+		return BoardDiagnosticsReport{}, newValidationError("board has no columns")
+	}
+
+	fallbackColumnID := columns[0].ID
+	for index, card := range cards {
+		if !columnExists(columns, card.ColumnID) {
+			cards[index].ColumnID = fallbackColumnID
+		}
+	}
+	reindexCards(cards)
+	now := nowMillis()
+	for index := range cards {
+		cards[index].UpdatedAt = now
+		cards[index].UpdatedBy = actorID
+		cards[index].Version++
+		if looksDoneColumn(columns, cards[index].ColumnID) && cards[index].Progress == 0 {
+			cards[index].Progress = 100
+		}
+		if err := s.store.SaveCard(cards[index]); err != nil {
+			return BoardDiagnosticsReport{}, err
+		}
+	}
+
+	board.UpdatedAt = now
+	board.Version++
+	if err := s.store.SaveBoard(board); err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+
+	if err := s.store.AppendActivity(board.ID, newActivity(board.ID, "board", board.ID, "board.reindexed", actorID, nil, map[string]any{
+		"cards": len(cards),
+	})); err != nil {
+		return BoardDiagnosticsReport{}, err
+	}
+
+	return s.GetBoardDiagnostics(boardID)
+}
+
 func (s *FlowService) BuildColumnCardIDs(boardID string) (map[string][]string, error) {
 	columns, err := s.store.GetColumns(boardID)
 	if err != nil {
@@ -1102,6 +1183,151 @@ func buildBoardSummary(board Board, cards []Card, columns []BoardColumn, isDefau
 		Columns:        len(columns),
 		Assignees:      assignees,
 		RecentActivity: recentActivity,
+	}
+}
+
+func buildBoardDiagnosticsReport(board Board, columns []BoardColumn, templates []CardTemplate, cards []Card, dependencies []Dependency, activity []Activity) BoardDiagnosticsReport {
+	columnIDs := make(map[string]struct{}, len(columns))
+	for _, column := range columns {
+		columnIDs[column.ID] = struct{}{}
+	}
+
+	cardIDs := make(map[string]Card, len(cards))
+	today := startOfDay(time.Now().UTC())
+	summary := BoardDiagnosticsSummary{
+		Columns:      len(columns),
+		Cards:        len(cards),
+		Templates:    len(templates),
+		Dependencies: len(dependencies),
+		Activities:   len(activity),
+	}
+
+	invalidDateCards := make([]string, 0)
+	orphanColumnCards := make([]string, 0)
+	columnPositionKeys := make(map[string]map[int][]string)
+
+	for _, card := range cards {
+		cardIDs[card.ID] = card
+		summary.Comments += len(card.Comments)
+		if card.Milestone {
+			summary.Milestones++
+		}
+		if strings.TrimSpace(card.StartDate) != "" || strings.TrimSpace(card.DueDate) != "" {
+			summary.ScheduledCards++
+		}
+		if dueDate, ok := parseDay(card.DueDate); ok && card.Progress < 100 && dueDate.Before(today) {
+			summary.OverdueCards++
+		}
+		if err := validateDates(card.StartDate, card.DueDate); err != nil {
+			invalidDateCards = append(invalidDateCards, card.ID)
+		}
+		if _, ok := columnIDs[card.ColumnID]; !ok {
+			orphanColumnCards = append(orphanColumnCards, card.ID)
+		}
+		if _, ok := columnPositionKeys[card.ColumnID]; !ok {
+			columnPositionKeys[card.ColumnID] = map[int][]string{}
+		}
+		columnPositionKeys[card.ColumnID][card.Position] = append(columnPositionKeys[card.ColumnID][card.Position], card.ID)
+	}
+	summary.InvalidDates = len(invalidDateCards)
+
+	issues := make([]BoardDiagnosticsIssue, 0)
+	if len(columns) == 0 {
+		issues = append(issues, BoardDiagnosticsIssue{
+			Code:     "missing_columns",
+			Severity: "error",
+			Title:    "Board has no columns",
+			Detail:   "Cards cannot be placed safely until the board has at least one column.",
+			Count:    1,
+		})
+	}
+	if len(orphanColumnCards) > 0 {
+		issues = append(issues, BoardDiagnosticsIssue{
+			Code:       "orphan_column_cards",
+			Severity:   "error",
+			Title:      "Cards reference missing columns",
+			Detail:     "Some cards point to columns that no longer exist and should be moved to a valid fallback column.",
+			EntityIDs:  orphanColumnCards,
+			EntityType: "card",
+			Count:      len(orphanColumnCards),
+		})
+	}
+	if len(invalidDateCards) > 0 {
+		issues = append(issues, BoardDiagnosticsIssue{
+			Code:       "invalid_card_dates",
+			Severity:   "warning",
+			Title:      "Cards have invalid date ranges",
+			Detail:     "Some cards have a due date earlier than the start date.",
+			EntityIDs:  invalidDateCards,
+			EntityType: "card",
+			Count:      len(invalidDateCards),
+		})
+	}
+
+	duplicatePositionCards := make([]string, 0)
+	for _, positions := range columnPositionKeys {
+		for _, ids := range positions {
+			if len(ids) > 1 {
+				duplicatePositionCards = append(duplicatePositionCards, ids...)
+			}
+		}
+	}
+	if len(duplicatePositionCards) > 0 {
+		issues = append(issues, BoardDiagnosticsIssue{
+			Code:       "duplicate_card_positions",
+			Severity:   "warning",
+			Title:      "Duplicate card positions detected",
+			Detail:     "Some columns contain cards with the same manual order value. Reindexing will normalize the sequence.",
+			EntityIDs:  uniqueStrings(duplicatePositionCards),
+			EntityType: "card",
+			Count:      len(uniqueStrings(duplicatePositionCards)),
+		})
+	}
+
+	missingDependencyIDs := make([]string, 0)
+	selfDependencyIDs := make([]string, 0)
+	for _, dependency := range dependencies {
+		if dependency.SourceCardID == dependency.TargetCardID {
+			selfDependencyIDs = append(selfDependencyIDs, dependency.ID)
+		}
+		if _, ok := cardIDs[dependency.SourceCardID]; !ok {
+			missingDependencyIDs = append(missingDependencyIDs, dependency.ID)
+			continue
+		}
+		if _, ok := cardIDs[dependency.TargetCardID]; !ok {
+			missingDependencyIDs = append(missingDependencyIDs, dependency.ID)
+		}
+	}
+	if len(missingDependencyIDs) > 0 {
+		issues = append(issues, BoardDiagnosticsIssue{
+			Code:       "orphan_dependencies",
+			Severity:   "warning",
+			Title:      "Dependencies reference missing cards",
+			Detail:     "Some dependency edges point to cards that no longer exist.",
+			EntityIDs:  uniqueStrings(missingDependencyIDs),
+			EntityType: "dependency",
+			Count:      len(uniqueStrings(missingDependencyIDs)),
+		})
+	}
+	if len(selfDependencyIDs) > 0 {
+		issues = append(issues, BoardDiagnosticsIssue{
+			Code:       "self_dependencies",
+			Severity:   "warning",
+			Title:      "Self-referencing dependencies found",
+			Detail:     "A dependency should not point from a card back to the same card.",
+			EntityIDs:  uniqueStrings(selfDependencyIDs),
+			EntityType: "dependency",
+			Count:      len(uniqueStrings(selfDependencyIDs)),
+		})
+	}
+
+	return BoardDiagnosticsReport{
+		BoardID:         board.ID,
+		GeneratedAt:     nowMillis(),
+		Summary:         summary,
+		Issues:          issues,
+		Healthy:         len(issues) == 0,
+		RepairAvailable: len(columns) > 0 && (len(orphanColumnCards) > 0 || len(duplicatePositionCards) > 0),
 	}
 }
 
