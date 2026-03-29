@@ -16,7 +16,8 @@ export type BoardSettingsDraft = {
     postUpdates: boolean;
     postDueSoon: boolean;
     allowMentions: boolean;
-    defaultView: 'board' | 'gantt';
+    calendarFeedEnabled: boolean;
+    defaultView: 'board' | 'gantt' | 'dashboard';
     columnsText: string;
     templates: CardTemplateDraft[];
     version: number;
@@ -55,7 +56,7 @@ export type FlowUrlState = {
     boardId: string;
     channelId?: string;
     cardId?: string;
-    view?: 'board' | 'gantt';
+    view?: 'board' | 'gantt' | 'dashboard';
 };
 
 export const EMPTY_FILTERS: BoardFilters = {
@@ -71,6 +72,7 @@ export const DEFAULT_BOARD_SETTINGS = {
     post_updates: true,
     post_due_soon: false,
     allow_mentions: true,
+    calendar_feed_enabled: false,
     default_view: 'board' as const,
 };
 
@@ -90,6 +92,7 @@ export function createBoardSettingsDraft(bundle: BoardBundle): BoardSettingsDraf
         postUpdates: bundle.board.settings.post_updates,
         postDueSoon: bundle.board.settings.post_due_soon,
         allowMentions: bundle.board.settings.allow_mentions,
+        calendarFeedEnabled: bundle.board.settings.calendar_feed_enabled,
         defaultView: bundle.board.settings.default_view,
         columnsText: bundle.columns.map((column) => `${column.name}|${column.wip_limit || 0}`).join('\n'),
         templates: bundle.templates.map(createTemplateDraft),

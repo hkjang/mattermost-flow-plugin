@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,9 +17,10 @@ import (
 
 func (p *Plugin) initRouter() *mux.Router {
 	router := mux.NewRouter()
-	router.Use(p.MattermostAuthorizationRequired)
+	router.HandleFunc("/calendar/{id}.ics", p.handlePublicBoardCalendarICS).Methods(http.MethodGet)
 
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
+	apiRouter.Use(p.MattermostAuthorizationRequired)
 	apiRouter.HandleFunc("/ping", p.handlePing).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards", p.handleListBoards).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/summary/stream", p.handleBoardSummaryStream).Methods(http.MethodGet)
@@ -26,6 +28,9 @@ func (p *Plugin) initRouter() *mux.Router {
 	apiRouter.HandleFunc("/boards/{id}", p.handleGetBoard).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}", p.handleUpdateBoard).Methods(http.MethodPatch)
 	apiRouter.HandleFunc("/boards/{id}", p.handleDeleteBoard).Methods(http.MethodDelete)
+	apiRouter.HandleFunc("/boards/{id}/calendar-feed", p.handleGetBoardCalendarFeed).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/boards/{id}/calendar-feed/rotate", p.handleRotateBoardCalendarFeed).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/boards/{id}/calendar.ics", p.handleAuthenticatedBoardCalendarICS).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}/stream", p.handleBoardStream).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}/cards", p.handleListCards).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}/gantt", p.handleGetGantt).Methods(http.MethodGet)
@@ -203,6 +208,102 @@ func (p *Plugin) handleDeleteBoard(w http.ResponseWriter, r *http.Request) {
 		Board:      &board,
 	})
 	p.writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (p *Plugin) handleGetBoardCalendarFeed(w http.ResponseWriter, r *http.Request) {
+	userID := p.getUserID(r)
+	boardID := mux.Vars(r)["id"]
+
+	board, err := p.service.GetBoard(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+	if err := p.authorizeBoard(userID, board, true); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	info, err := p.buildBoardCalendarFeedInfo(board, userID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	p.writeJSON(w, http.StatusOK, info)
+}
+
+func (p *Plugin) handleRotateBoardCalendarFeed(w http.ResponseWriter, r *http.Request) {
+	userID := p.getUserID(r)
+	boardID := mux.Vars(r)["id"]
+
+	board, err := p.service.GetBoard(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+	if err := p.authorizeBoard(userID, board, true); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	if _, err := p.service.RotateBoardCalendarFeed(boardID, userID); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	info, err := p.buildBoardCalendarFeedInfo(board, userID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	p.publishBoardEvent(BoardStreamEvent{
+		BoardID:    board.ID,
+		EntityType: "board",
+		Action:     "board.calendar.rotated",
+		ActorID:    userID,
+		Board:      &board,
+	})
+	p.writeJSON(w, http.StatusOK, info)
+}
+
+func (p *Plugin) handleAuthenticatedBoardCalendarICS(w http.ResponseWriter, r *http.Request) {
+	userID := p.getUserID(r)
+	boardID := mux.Vars(r)["id"]
+
+	board, err := p.service.GetBoard(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+	if err := p.authorizeBoard(userID, board, false); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	if err := p.writeBoardCalendarICS(w, board); err != nil {
+		p.writeError(w, err)
+	}
+}
+
+func (p *Plugin) handlePublicBoardCalendarICS(w http.ResponseWriter, r *http.Request) {
+	boardID := mux.Vars(r)["id"]
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+
+	board, err := p.service.GetBoard(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+	if err := p.authorizeCalendarToken(board, token); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	if err := p.writeBoardCalendarICS(w, board); err != nil {
+		p.writeError(w, err)
+	}
 }
 
 func (p *Plugin) handleBoardSummaryStream(w http.ResponseWriter, r *http.Request) {
@@ -974,6 +1075,83 @@ func (p *Plugin) writeJSON(w http.ResponseWriter, status int, body any) {
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		p.API.LogError("failed to write json response", "error", err.Error())
 	}
+}
+
+func (p *Plugin) buildBoardCalendarFeedInfo(board Board, actorID string) (BoardCalendarFeedInfo, error) {
+	info := BoardCalendarFeedInfo{
+		Enabled:     board.Settings.CalendarFeedEnabled,
+		DownloadURL: p.buildBoardCalendarDownloadURL(board.ID),
+	}
+
+	var (
+		feed BoardCalendarFeed
+		err  error
+	)
+	if board.Settings.CalendarFeedEnabled {
+		feed, err = p.service.EnsureBoardCalendarFeed(board.ID, actorID)
+	} else {
+		feed, err = p.service.GetBoardCalendarFeed(board.ID)
+	}
+
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return BoardCalendarFeedInfo{}, err
+	}
+
+	if err == nil && strings.TrimSpace(feed.Token) != "" {
+		info.HasToken = true
+		info.UpdatedAt = feed.UpdatedAt
+		if board.Settings.CalendarFeedEnabled {
+			info.SubscribeURL = p.buildBoardCalendarSubscribeURL(board.ID, feed.Token)
+		}
+	}
+
+	return info, nil
+}
+
+func (p *Plugin) authorizeCalendarToken(board Board, token string) error {
+	if !board.Settings.CalendarFeedEnabled {
+		return newForbiddenError("calendar feed is disabled")
+	}
+	if token == "" {
+		return newForbiddenError("calendar token is required")
+	}
+
+	feed, err := p.service.GetBoardCalendarFeed(board.ID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return newForbiddenError("calendar feed is not configured")
+		}
+		return err
+	}
+
+	if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(feed.Token)), []byte(token)) != 1 {
+		return newForbiddenError("invalid calendar token")
+	}
+
+	return nil
+}
+
+func (p *Plugin) writeBoardCalendarICS(w http.ResponseWriter, board Board) error {
+	columns, err := p.service.store.GetColumns(board.ID)
+	if err != nil {
+		return err
+	}
+	cards, err := p.service.ListCards(board.ID)
+	if err != nil {
+		return err
+	}
+
+	calendar := buildBoardCalendarICS(board, columns, cards, func(cardID string) string {
+		return p.buildFlowCardURL(board, cardID, "board")
+	})
+
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", sanitizeICSFilename(board.Name)))
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte(calendar)); err != nil {
+		return fmt.Errorf("failed to write calendar: %w", err)
+	}
+	return nil
 }
 
 func (p *Plugin) writeError(w http.ResponseWriter, err error) {

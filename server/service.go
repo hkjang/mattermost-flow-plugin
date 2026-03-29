@@ -151,6 +151,11 @@ func (s *FlowService) CreateBoard(actorID string, req CreateBoardRequest) (*Boar
 	if err := s.store.SaveBoard(board); err != nil {
 		return nil, err
 	}
+	if board.Settings.CalendarFeedEnabled {
+		if _, err := s.ensureBoardCalendarFeed(board.ID, actorID); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.store.SaveColumns(board.ID, columns); err != nil {
 		return nil, err
 	}
@@ -209,6 +214,11 @@ func (s *FlowService) UpdateBoard(actorID, boardID string, req UpdateBoardReques
 
 	if err := s.store.SaveBoard(board); err != nil {
 		return nil, err
+	}
+	if board.Settings.CalendarFeedEnabled {
+		if _, err := s.ensureBoardCalendarFeed(board.ID, actorID); err != nil {
+			return nil, err
+		}
 	}
 
 	if req.Columns != nil {
@@ -937,6 +947,42 @@ func (s *FlowService) GetBoardSummary(boardID string) (BoardSummary, error) {
 	return buildBoardSummary(board, cards, columns, isDefault, latestActivity(activity)), nil
 }
 
+func (s *FlowService) GetBoardCalendarFeed(boardID string) (BoardCalendarFeed, error) {
+	return s.store.GetCalendarFeed(boardID)
+}
+
+func (s *FlowService) EnsureBoardCalendarFeed(boardID, actorID string) (BoardCalendarFeed, error) {
+	return s.ensureBoardCalendarFeed(boardID, actorID)
+}
+
+func (s *FlowService) RotateBoardCalendarFeed(boardID, actorID string) (BoardCalendarFeed, error) {
+	board, err := s.store.GetBoard(boardID)
+	if err != nil {
+		return BoardCalendarFeed{}, err
+	}
+	if !board.Settings.CalendarFeedEnabled {
+		return BoardCalendarFeed{}, newValidationError("calendar feed is disabled")
+	}
+
+	feed := BoardCalendarFeed{
+		BoardID:   boardID,
+		Token:     model.NewId(),
+		UpdatedBy: actorID,
+		UpdatedAt: nowMillis(),
+	}
+	if err := s.store.SaveCalendarFeed(feed); err != nil {
+		return BoardCalendarFeed{}, err
+	}
+
+	if err := s.store.AppendActivity(boardID, newActivity(boardID, "board", boardID, "board.calendar.rotated", actorID, nil, map[string]any{
+		"calendar_feed_enabled": true,
+	})); err != nil {
+		return BoardCalendarFeed{}, err
+	}
+
+	return feed, nil
+}
+
 func (s *FlowService) BuildColumnCardIDs(boardID string) (map[string][]string, error) {
 	columns, err := s.store.GetColumns(boardID)
 	if err != nil {
@@ -1258,10 +1304,11 @@ func normalizeVisibility(value, channelID string) string {
 
 func normalizeBoardSettings(settings *BoardSettings) BoardSettings {
 	defaults := BoardSettings{
-		PostUpdates:   true,
-		PostDueSoon:   false,
-		AllowMentions: true,
-		DefaultView:   "board",
+		PostUpdates:         true,
+		PostDueSoon:         false,
+		AllowMentions:       true,
+		DefaultView:         "board",
+		CalendarFeedEnabled: false,
 	}
 	if settings == nil {
 		return defaults
@@ -1270,16 +1317,49 @@ func normalizeBoardSettings(settings *BoardSettings) BoardSettings {
 	defaults.PostDueSoon = settings.PostDueSoon
 	defaults.AllowMentions = settings.AllowMentions
 	defaults.DefaultView = normalizeViewType(settings.DefaultView, defaults.DefaultView)
+	defaults.CalendarFeedEnabled = settings.CalendarFeedEnabled
 	return defaults
+}
+
+func (s *FlowService) ensureBoardCalendarFeed(boardID, actorID string) (BoardCalendarFeed, error) {
+	board, err := s.store.GetBoard(boardID)
+	if err != nil {
+		return BoardCalendarFeed{}, err
+	}
+	if !board.Settings.CalendarFeedEnabled {
+		return BoardCalendarFeed{}, newValidationError("calendar feed is disabled")
+	}
+
+	feed, err := s.store.GetCalendarFeed(boardID)
+	switch {
+	case err == nil && strings.TrimSpace(feed.Token) != "":
+		return feed, nil
+	case err != nil && !errors.Is(err, ErrNotFound):
+		return BoardCalendarFeed{}, err
+	}
+
+	feed = BoardCalendarFeed{
+		BoardID:   boardID,
+		Token:     model.NewId(),
+		UpdatedBy: actorID,
+		UpdatedAt: nowMillis(),
+	}
+	if err := s.store.SaveCalendarFeed(feed); err != nil {
+		return BoardCalendarFeed{}, err
+	}
+	return feed, nil
 }
 
 func normalizeViewType(value, fallback string) string {
 	switch strings.TrimSpace(strings.ToLower(value)) {
-	case "board", "gantt":
+	case "board", "gantt", "dashboard":
 		return strings.TrimSpace(strings.ToLower(value))
 	default:
 		if fallback == "gantt" {
 			return "gantt"
+		}
+		if fallback == "dashboard" {
+			return "dashboard"
 		}
 		return "board"
 	}

@@ -338,6 +338,36 @@ textarea {
     border-top: 1px solid var(--flow-border);
 }
 
+.flow-calendar-panel {
+    display: grid;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid var(--flow-border);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 250, 242, 0.9), rgba(255, 255, 255, 0.98));
+}
+
+.flow-calendar-panel__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.flow-calendar-panel__content {
+    display: grid;
+    gap: 12px;
+}
+
+.flow-calendar-panel__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    color: var(--flow-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
 .flow-template-editor__header,
 .flow-template-card__header {
     display: flex;
@@ -377,6 +407,154 @@ textarea {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 16px;
+}
+
+.flow-dashboard {
+    display: grid;
+    gap: 18px;
+}
+
+.flow-dashboard__metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+}
+
+.flow-dashboard__metric,
+.flow-dashboard__panel,
+.flow-dashboard__card,
+.flow-dashboard__activity-item {
+    background: var(--flow-panel);
+    border: 1px solid var(--flow-border);
+    border-radius: var(--flow-radius);
+}
+
+.flow-dashboard__metric,
+.flow-dashboard__panel,
+.flow-dashboard__activity-item,
+.flow-dashboard__card {
+    box-shadow: var(--flow-shadow);
+}
+
+.flow-dashboard__metric {
+    display: grid;
+    gap: 6px;
+    padding: 16px;
+}
+
+.flow-dashboard__metric span,
+.flow-dashboard__metric small,
+.flow-dashboard__panel-header span,
+.flow-dashboard__bar-label span,
+.flow-dashboard__card span,
+.flow-dashboard__card small,
+.flow-dashboard__activity-item span,
+.flow-dashboard__activity-item small {
+    color: var(--flow-muted);
+}
+
+.flow-dashboard__metric strong {
+    font-size: 28px;
+    letter-spacing: -0.04em;
+}
+
+.flow-dashboard__metric--accent {
+    background: linear-gradient(180deg, rgba(15, 140, 115, 0.14), rgba(255, 255, 255, 0.92));
+}
+
+.flow-dashboard__metric--warning {
+    background: linear-gradient(180deg, rgba(240, 140, 43, 0.15), rgba(255, 255, 255, 0.92));
+}
+
+.flow-dashboard__metric--danger {
+    background: linear-gradient(180deg, rgba(204, 86, 56, 0.14), rgba(255, 255, 255, 0.92));
+}
+
+.flow-dashboard__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.flow-dashboard__panel {
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+}
+
+.flow-dashboard__panel-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+}
+
+.flow-dashboard__bars,
+.flow-dashboard__list,
+.flow-dashboard__activity {
+    display: grid;
+    gap: 12px;
+}
+
+.flow-dashboard__bar-row {
+    display: grid;
+    gap: 8px;
+}
+
+.flow-dashboard__bar-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+}
+
+.flow-dashboard__bar-track {
+    position: relative;
+    overflow: hidden;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(21, 34, 45, 0.08);
+}
+
+.flow-dashboard__bar-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--flow-accent), #72d3bf);
+}
+
+.flow-dashboard__bar-fill--warning {
+    background: linear-gradient(90deg, var(--flow-warning), #f6bb69);
+}
+
+.flow-dashboard__bar-fill--danger {
+    background: linear-gradient(90deg, var(--flow-danger), #ee8d73);
+}
+
+.flow-dashboard__card {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    padding: 14px;
+    text-align: left;
+}
+
+.flow-dashboard__card--accent {
+    border-color: rgba(15, 140, 115, 0.28);
+}
+
+.flow-dashboard__card--warning {
+    border-color: rgba(240, 140, 43, 0.3);
+}
+
+.flow-dashboard__card--danger {
+    border-color: rgba(204, 86, 56, 0.32);
+}
+
+.flow-dashboard__activity-item {
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
 }
 
 .flow-column {
@@ -684,6 +862,10 @@ textarea {
     }
 
     .flow-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .flow-dashboard__grid {
         grid-template-columns: 1fr;
     }
 }

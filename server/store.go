@@ -38,6 +38,9 @@ type FlowStore interface {
 	SavePreference(preference Preference) error
 	GetDefaultBoard(channelID string) (string, error)
 	SaveDefaultBoard(channelID, boardID string) error
+	GetCalendarFeed(boardID string) (BoardCalendarFeed, error)
+	SaveCalendarFeed(feed BoardCalendarFeed) error
+	DeleteCalendarFeed(boardID string) error
 	GetDueSoonNotification(boardID, cardID string) (DueSoonNotification, error)
 	SaveDueSoonNotification(notification DueSoonNotification) error
 	DeleteDueSoonNotification(boardID, cardID string) error
@@ -101,6 +104,10 @@ func userPreferenceKey(userID, boardID string) string {
 
 func channelDefaultBoardKey(channelID string) string {
 	return fmt.Sprintf("channel:%s:defaultBoard", channelID)
+}
+
+func boardCalendarFeedKey(boardID string) string {
+	return fmt.Sprintf("board:%s:calendar", boardID)
 }
 
 func dueSoonNotificationKey(boardID, cardID string) string {
@@ -272,6 +279,7 @@ func (s *kvStore) DeleteBoard(boardID string) error {
 		boardCardIDsKey(boardID),
 		boardDepsKey(boardID),
 		boardActivityKey(boardID),
+		boardCalendarFeedKey(boardID),
 	}
 	for _, key := range keys {
 		if err := s.delete(key); err != nil && !isNotFound(err) {
@@ -484,6 +492,22 @@ func (s *kvStore) GetDefaultBoard(channelID string) (string, error) {
 
 func (s *kvStore) SaveDefaultBoard(channelID, boardID string) error {
 	return s.saveJSON(channelDefaultBoardKey(channelID), boardID)
+}
+
+func (s *kvStore) GetCalendarFeed(boardID string) (BoardCalendarFeed, error) {
+	var feed BoardCalendarFeed
+	if err := s.loadJSON(boardCalendarFeedKey(boardID), &feed); err != nil {
+		return BoardCalendarFeed{}, err
+	}
+	return feed, nil
+}
+
+func (s *kvStore) SaveCalendarFeed(feed BoardCalendarFeed) error {
+	return s.saveJSON(boardCalendarFeedKey(feed.BoardID), feed)
+}
+
+func (s *kvStore) DeleteCalendarFeed(boardID string) error {
+	return s.delete(boardCalendarFeedKey(boardID))
 }
 
 func (s *kvStore) GetDueSoonNotification(boardID, cardID string) (DueSoonNotification, error) {

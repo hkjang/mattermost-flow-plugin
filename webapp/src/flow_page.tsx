@@ -31,7 +31,10 @@ import {
 } from './flow_helpers';
 import type {
     Activity,
+    BoardCalendarFeedInfo,
     BoardBundle,
+    BoardColumn,
+    BoardFilters,
     FlowBoardSummaryEvent,
     BoardSummary,
     Card,
@@ -58,6 +61,46 @@ type GanttDragState = {
     dueDate: string;
 };
 
+type DashboardMetric = {
+    label: string;
+    value: string;
+    tone?: 'neutral' | 'accent' | 'warning' | 'danger';
+    hint?: string;
+};
+
+type DashboardBarItem = {
+    label: string;
+    value: number;
+    detail: string;
+    tone?: 'neutral' | 'accent' | 'warning' | 'danger';
+};
+
+type DashboardCardItem = {
+    id: string;
+    title: string;
+    meta: string;
+    detail: string;
+    tone?: 'neutral' | 'accent' | 'warning' | 'danger';
+};
+
+type DashboardActivityItem = {
+    id: string;
+    title: string;
+    detail: string;
+    timestamp: string;
+};
+
+type DashboardModel = {
+    metrics: DashboardMetric[];
+    status: DashboardBarItem[];
+    priorities: DashboardBarItem[];
+    assignees: DashboardBarItem[];
+    upcoming: DashboardCardItem[];
+    milestones: DashboardCardItem[];
+    activity: DashboardActivityItem[];
+    filtered: boolean;
+};
+
 const GANTT_UNIT_WIDTH = 54;
 
 export function FlowPage({context}: FlowPageProps) {
@@ -65,7 +108,7 @@ export function FlowPage({context}: FlowPageProps) {
     const [boardData, setBoardData] = useState<BoardBundle | null>(null);
     const [selectedBoardId, setSelectedBoardId] = useState('');
     const [selectedCardId, setSelectedCardId] = useState('');
-    const [viewType, setViewType] = useState<'board' | 'gantt'>('board');
+    const [viewType, setViewType] = useState<'board' | 'gantt' | 'dashboard'>('board');
     const [zoomLevel, setZoomLevel] = useState<'day' | 'week' | 'month'>('week');
     const [filters, setFilters] = useState(EMPTY_FILTERS);
     const [sortMode, setSortMode] = useState<'manual' | 'priority' | 'due' | 'created'>('manual');
@@ -91,6 +134,7 @@ export function FlowPage({context}: FlowPageProps) {
     const [preferencesReady, setPreferencesReady] = useState(false);
     const [ganttDrag, setGanttDrag] = useState<GanttDragState | null>(null);
     const [usersById, setUsersById] = useState<Record<string, FlowUser>>({});
+    const [calendarFeedInfo, setCalendarFeedInfo] = useState<BoardCalendarFeedInfo | null>(null);
     const liveRefreshTimerRef = useRef<number | null>(null);
     const pendingStreamEventsRef = useRef<Record<string, number>>({});
 
@@ -98,7 +142,7 @@ export function FlowPage({context}: FlowPageProps) {
     const effectiveChannelId = params.get('channel_id') || context.channelId || '';
     const requestedBoardId = params.get('board_id') || '';
     const requestedCardId = params.get('card_id') || '';
-    const requestedView = params.get('view') === 'gantt' ? 'gantt' : params.get('view') === 'board' ? 'board' : '';
+    const requestedView = params.get('view') === 'gantt' ? 'gantt' : params.get('view') === 'dashboard' ? 'dashboard' : params.get('view') === 'board' ? 'board' : '';
 
     useEffect(() => {
         let active = true;
@@ -157,7 +201,7 @@ export function FlowPage({context}: FlowPageProps) {
                 }
                 setBoardData(response);
                 setBoardSettingsDraft(createBoardSettingsDraft(response));
-                setViewType((requestedView as 'board' | 'gantt') || response.preference.view_type || response.board.settings.default_view || 'board');
+                setViewType((requestedView as 'board' | 'gantt' | 'dashboard') || response.preference.view_type || response.board.settings.default_view || 'board');
                 setZoomLevel(response.preference.zoom_level || 'week');
                 setFilters(response.preference.filters || EMPTY_FILTERS);
                 setPreferencesReady(true);
@@ -193,6 +237,7 @@ export function FlowPage({context}: FlowPageProps) {
         setUsersById({});
         setNewCardAssigneeIds([]);
         setNewCardTemplateId('');
+        setCalendarFeedInfo(null);
     }, [selectedBoardId]);
 
     useEffect(() => {
@@ -221,6 +266,7 @@ export function FlowPage({context}: FlowPageProps) {
     const ganttUnits = buildGanttUnits(ganttCards, zoomLevel);
     const boardAssignees = collectAssigneeUsers(cards, usersById);
     const selectedTemplate = templates.find((template) => template.id === newCardTemplateId) || null;
+    const dashboardModel = buildDashboardModel(visibleCards, columns, dependencies, boardData?.activity || [], usersById, filters);
 
     useEffect(() => {
         if (newCardTemplateId && !templates.some((template) => template.id === newCardTemplateId)) {
@@ -273,6 +319,44 @@ export function FlowPage({context}: FlowPageProps) {
             active = false;
         };
     }, [boardData, mergeUsers, selectedBoardId]);
+
+    useEffect(() => {
+        if (!selectedBoard) {
+            setCalendarFeedInfo(null);
+            return;
+        }
+
+        setCalendarFeedInfo({
+            enabled: selectedBoard.settings.calendar_feed_enabled,
+            has_token: false,
+            download_url: flowClient.getBoardCalendarDownloadUrl(selectedBoard.id),
+        });
+    }, [selectedBoard?.id, selectedBoard?.settings.calendar_feed_enabled]);
+
+    useEffect(() => {
+        if (!boardSettingsOpen || !selectedBoard) {
+            return;
+        }
+
+        let active = true;
+        void flowClient.getBoardCalendarFeed(selectedBoard.id).then((response) => {
+            if (active) {
+                setCalendarFeedInfo(response);
+            }
+        }).catch(() => {
+            if (active) {
+                setCalendarFeedInfo({
+                    enabled: selectedBoard.settings.calendar_feed_enabled,
+                    has_token: false,
+                    download_url: flowClient.getBoardCalendarDownloadUrl(selectedBoard.id),
+                });
+            }
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [boardSettingsOpen, selectedBoard?.id, selectedBoard?.settings.calendar_feed_enabled]);
 
     useEffect(() => {
         if (!selectedBoardId || !boardData || boardData.board.id !== selectedBoardId) {
@@ -578,6 +662,7 @@ export function FlowPage({context}: FlowPageProps) {
                     post_updates: boardSettingsDraft.postUpdates,
                     post_due_soon: boardSettingsDraft.postDueSoon,
                     allow_mentions: boardSettingsDraft.allowMentions,
+                    calendar_feed_enabled: boardSettingsDraft.calendarFeedEnabled,
                     default_view: boardSettingsDraft.defaultView,
                 },
                 version: boardSettingsDraft.version,
@@ -816,7 +901,41 @@ export function FlowPage({context}: FlowPageProps) {
         }
     }
 
-    function copyBoardLink(nextView: 'board' | 'gantt') {
+    function openCalendarDownload() {
+        if (!selectedBoard) {
+            return;
+        }
+
+        window.open(flowClient.getBoardCalendarDownloadUrl(selectedBoard.id), '_blank', 'noopener,noreferrer');
+    }
+
+    function copyCalendarSubscriptionLink() {
+        if (!calendarFeedInfo?.subscribe_url) {
+            return;
+        }
+
+        void copyLink(calendarFeedInfo.subscribe_url, 'Calendar subscription link copied.');
+    }
+
+    async function rotateCalendarFeed() {
+        if (!selectedBoard) {
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const response = await flowClient.rotateBoardCalendarFeed(selectedBoard.id);
+            setCalendarFeedInfo(response);
+            rememberLocalEvent(selectedBoard.id, 'board.calendar.rotated');
+            setNotice('Calendar subscription token rotated.');
+        } catch (rotateError) {
+            setError(getErrorMessage(rotateError));
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    function copyBoardLink(nextView: 'board' | 'gantt' | 'dashboard') {
         if (!selectedBoardId) {
             return;
         }
@@ -825,7 +944,7 @@ export function FlowPage({context}: FlowPageProps) {
             boardId: selectedBoardId,
             channelId: effectiveChannelId,
             view: nextView,
-        }), nextView === 'gantt' ? 'Gantt link copied.' : 'Board link copied.');
+        }), nextView === 'gantt' ? 'Gantt link copied.' : nextView === 'dashboard' ? 'Dashboard link copied.' : 'Board link copied.');
     }
 
     function copyCardLink() {
@@ -925,9 +1044,12 @@ export function FlowPage({context}: FlowPageProps) {
                     </div>
                     <div className='flow-toolbar__actions'>
                         <button className={`flow-button ${viewType === 'board' ? 'flow-button--primary' : ''}`} onClick={() => setViewType('board')}>Board</button>
+                        <button className={`flow-button ${viewType === 'dashboard' ? 'flow-button--primary' : ''}`} onClick={() => setViewType('dashboard')}>Dashboard</button>
                         <button className={`flow-button ${viewType === 'gantt' ? 'flow-button--primary' : ''}`} onClick={() => setViewType('gantt')}>Gantt</button>
                         <button className='flow-button' onClick={() => copyBoardLink('board')} disabled={!selectedBoard}>Copy board link</button>
+                        <button className='flow-button' onClick={() => copyBoardLink('dashboard')} disabled={!selectedBoard}>Copy dashboard link</button>
                         <button className='flow-button' onClick={() => copyBoardLink('gantt')} disabled={!selectedBoard}>Copy gantt link</button>
+                        <button className='flow-button' onClick={openCalendarDownload} disabled={!selectedBoard}>Open calendar .ics</button>
                         <button className='flow-button' onClick={() => setBoardSettingsOpen((value) => !value)} disabled={!selectedBoard}>Settings</button>
                         <button className='flow-button flow-button--danger' onClick={deleteBoard} disabled={!selectedBoard || saving}>Delete</button>
                     </div>
@@ -950,8 +1072,9 @@ export function FlowPage({context}: FlowPageProps) {
                             </label>
                             <label>
                                 Default view
-                                <select value={boardSettingsDraft.defaultView} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, defaultView: event.target.value as 'board' | 'gantt'})}>
+                                <select value={boardSettingsDraft.defaultView} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, defaultView: event.target.value as 'board' | 'gantt' | 'dashboard'})}>
                                     <option value='board'>Board</option>
+                                    <option value='dashboard'>Dashboard</option>
                                     <option value='gantt'>Gantt</option>
                                 </select>
                             </label>
@@ -968,6 +1091,35 @@ export function FlowPage({context}: FlowPageProps) {
                             <label><input checked={boardSettingsDraft.postUpdates} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, postUpdates: event.target.checked})} type='checkbox'/> Post channel updates</label>
                             <label><input checked={boardSettingsDraft.postDueSoon} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, postDueSoon: event.target.checked})} type='checkbox'/> Post due soon alerts</label>
                             <label><input checked={boardSettingsDraft.allowMentions} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, allowMentions: event.target.checked})} type='checkbox'/> Allow mentions</label>
+                            <label><input checked={boardSettingsDraft.calendarFeedEnabled} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, calendarFeedEnabled: event.target.checked})} type='checkbox'/> Enable calendar feed</label>
+                        </div>
+                        <div className='flow-calendar-panel'>
+                            <div className='flow-template-editor__header'>
+                                <div>
+                                    <strong>Calendar integration</strong>
+                                    <span>Publish scheduled cards as an iCalendar feed for Google Calendar, Apple Calendar, or Outlook.</span>
+                                </div>
+                                <div className='flow-calendar-panel__actions'>
+                                    <button className='flow-button' type='button' onClick={openCalendarDownload}>Open .ics</button>
+                                    <button className='flow-button' type='button' onClick={copyCalendarSubscriptionLink} disabled={!selectedBoard.settings.calendar_feed_enabled || !calendarFeedInfo?.subscribe_url}>Copy subscription link</button>
+                                    <button className='flow-button' type='button' onClick={rotateCalendarFeed} disabled={!selectedBoard.settings.calendar_feed_enabled || saving}>Rotate token</button>
+                                </div>
+                            </div>
+                            {!boardSettingsDraft.calendarFeedEnabled && (
+                                <div className='flow-empty'>Enable the calendar feed and save board settings to generate a shareable subscription URL.</div>
+                            )}
+                            {boardSettingsDraft.calendarFeedEnabled && (
+                                <div className='flow-calendar-panel__content'>
+                                    <label className='flow-settings__wide'>
+                                        Subscription URL
+                                        <input readOnly value={calendarFeedInfo?.subscribe_url || ''} placeholder='Save settings to generate a calendar subscription URL'/>
+                                    </label>
+                                    <div className='flow-calendar-panel__meta'>
+                                        <span>Use the `.ics` link for one-time downloads, or the subscription URL for live calendar sync.</span>
+                                        {calendarFeedInfo?.updated_at ? <span>Last rotated {formatDateTime(calendarFeedInfo.updated_at)}</span> : <span>Save settings to mint the first token.</span>}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className='flow-template-editor'>
                             <div className='flow-template-editor__header'>
@@ -1157,6 +1309,135 @@ export function FlowPage({context}: FlowPageProps) {
                                         </div>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {viewType === 'dashboard' && (
+                            <div className='flow-dashboard'>
+                                {dashboardModel.filtered && <div className='flow-alert'>Dashboard metrics reflect the current filters.</div>}
+                                <div className='flow-dashboard__metrics'>
+                                    {dashboardModel.metrics.map((metric) => (
+                                        <article className={`flow-dashboard__metric flow-dashboard__metric--${metric.tone || 'neutral'}`} key={metric.label}>
+                                            <span>{metric.label}</span>
+                                            <strong>{metric.value}</strong>
+                                            {metric.hint && <small>{metric.hint}</small>}
+                                        </article>
+                                    ))}
+                                </div>
+
+                                <div className='flow-dashboard__grid'>
+                                    <section className='flow-dashboard__panel'>
+                                        <div className='flow-dashboard__panel-header'>
+                                            <strong>Status distribution</strong>
+                                            <span>Cards by column</span>
+                                        </div>
+                                        <div className='flow-dashboard__bars'>
+                                            {dashboardModel.status.map((item) => (
+                                                <div className='flow-dashboard__bar-row' key={item.label}>
+                                                    <div className='flow-dashboard__bar-label'>
+                                                        <strong>{item.label}</strong>
+                                                        <span>{item.detail}</span>
+                                                    </div>
+                                                    <div className='flow-dashboard__bar-track'>
+                                                        <span className={`flow-dashboard__bar-fill flow-dashboard__bar-fill--${item.tone || 'neutral'}`} style={{width: `${item.value}%`}}/>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+
+                                    <section className='flow-dashboard__panel'>
+                                        <div className='flow-dashboard__panel-header'>
+                                            <strong>Priority mix</strong>
+                                            <span>Current workload pressure</span>
+                                        </div>
+                                        <div className='flow-dashboard__bars'>
+                                            {dashboardModel.priorities.map((item) => (
+                                                <div className='flow-dashboard__bar-row' key={item.label}>
+                                                    <div className='flow-dashboard__bar-label'>
+                                                        <strong>{item.label}</strong>
+                                                        <span>{item.detail}</span>
+                                                    </div>
+                                                    <div className='flow-dashboard__bar-track'>
+                                                        <span className={`flow-dashboard__bar-fill flow-dashboard__bar-fill--${item.tone || 'neutral'}`} style={{width: `${item.value}%`}}/>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+
+                                    <section className='flow-dashboard__panel'>
+                                        <div className='flow-dashboard__panel-header'>
+                                            <strong>Assignee load</strong>
+                                            <span>Open cards per person</span>
+                                        </div>
+                                        <div className='flow-dashboard__bars'>
+                                            {dashboardModel.assignees.length === 0 && <div className='flow-empty'>No active assignees yet.</div>}
+                                            {dashboardModel.assignees.map((item) => (
+                                                <div className='flow-dashboard__bar-row' key={item.label}>
+                                                    <div className='flow-dashboard__bar-label'>
+                                                        <strong>{item.label}</strong>
+                                                        <span>{item.detail}</span>
+                                                    </div>
+                                                    <div className='flow-dashboard__bar-track'>
+                                                        <span className={`flow-dashboard__bar-fill flow-dashboard__bar-fill--${item.tone || 'neutral'}`} style={{width: `${item.value}%`}}/>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+
+                                    <section className='flow-dashboard__panel'>
+                                        <div className='flow-dashboard__panel-header'>
+                                            <strong>Upcoming due</strong>
+                                            <span>Open the card detail from here</span>
+                                        </div>
+                                        <div className='flow-dashboard__list'>
+                                            {dashboardModel.upcoming.length === 0 && <div className='flow-empty'>No upcoming due cards.</div>}
+                                            {dashboardModel.upcoming.map((item) => (
+                                                <button className={`flow-dashboard__card flow-dashboard__card--${item.tone || 'neutral'}`} key={item.id} onClick={() => setSelectedCardId(item.id)}>
+                                                    <strong>{item.title}</strong>
+                                                    <span>{item.meta}</span>
+                                                    <small>{item.detail}</small>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </section>
+
+                                    <section className='flow-dashboard__panel'>
+                                        <div className='flow-dashboard__panel-header'>
+                                            <strong>Milestones</strong>
+                                            <span>Cards flagged as milestones</span>
+                                        </div>
+                                        <div className='flow-dashboard__list'>
+                                            {dashboardModel.milestones.length === 0 && <div className='flow-empty'>No milestone cards yet.</div>}
+                                            {dashboardModel.milestones.map((item) => (
+                                                <button className={`flow-dashboard__card flow-dashboard__card--${item.tone || 'neutral'}`} key={item.id} onClick={() => setSelectedCardId(item.id)}>
+                                                    <strong>{item.title}</strong>
+                                                    <span>{item.meta}</span>
+                                                    <small>{item.detail}</small>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </section>
+
+                                    <section className='flow-dashboard__panel'>
+                                        <div className='flow-dashboard__panel-header'>
+                                            <strong>Recent activity</strong>
+                                            <span>Latest movement on the board</span>
+                                        </div>
+                                        <div className='flow-dashboard__activity'>
+                                            {dashboardModel.activity.length === 0 && <div className='flow-empty'>No activity yet.</div>}
+                                            {dashboardModel.activity.map((item) => (
+                                                <div className='flow-dashboard__activity-item' key={item.id}>
+                                                    <strong>{item.title}</strong>
+                                                    <span>{item.detail}</span>
+                                                    <small>{item.timestamp}</small>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+                                </div>
                             </div>
                         )}
 
@@ -1387,6 +1668,176 @@ function describeTemplateCoverage(template: CardTemplate) {
     }
 
     return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+}
+
+function buildDashboardModel(cards: Card[], columns: BoardColumn[], dependencies: Dependency[], activity: Activity[], usersById: Record<string, FlowUser>, filters: BoardFilters): DashboardModel {
+    const today = startOfUtcDay(new Date());
+    const dueSoonLimit = new Date(today.getTime() + (72 * 60 * 60 * 1000));
+    const visibleCardIds = new Set(cards.map((card) => card.id));
+    const openCards: Card[] = [];
+    let doneCount = 0;
+    let overdueCount = 0;
+    let dueSoonCount = 0;
+    let milestoneCount = 0;
+    let progressTotal = 0;
+    let unscheduledCount = 0;
+
+    for (const card of cards) {
+        progressTotal += card.progress;
+        if (card.progress >= 100) {
+            doneCount++;
+        } else {
+            openCards.push(card);
+        }
+        if (card.milestone) {
+            milestoneCount++;
+        }
+        if (!card.start_date && !card.due_date) {
+            unscheduledCount++;
+        }
+
+        if (!card.due_date || card.progress >= 100) {
+            continue;
+        }
+
+        const dueDate = parseUtcDay(card.due_date);
+        if (!dueDate) {
+            continue;
+        }
+
+        if (dueDate < today) {
+            overdueCount++;
+        } else if (dueDate < dueSoonLimit) {
+            dueSoonCount++;
+        }
+    }
+
+    const blockedCardIds = new Set<string>();
+    for (const dependency of dependencies) {
+        if (!visibleCardIds.has(dependency.source_card_id) && !visibleCardIds.has(dependency.target_card_id)) {
+            continue;
+        }
+        if (visibleCardIds.has(dependency.source_card_id)) {
+            blockedCardIds.add(dependency.source_card_id);
+        }
+        if (visibleCardIds.has(dependency.target_card_id)) {
+            blockedCardIds.add(dependency.target_card_id);
+        }
+    }
+
+    const totalCards = cards.length;
+    const averageProgress = totalCards === 0 ? 0 : Math.round(progressTotal / totalCards);
+    const filtered = hasActiveFilters(filters);
+    const priorityOrder: Card['priority'][] = ['urgent', 'high', 'normal', 'low'];
+    const assigneeCounts = new Map<string, number>();
+
+    for (const card of openCards) {
+        if (card.assignee_ids.length === 0) {
+            assigneeCounts.set('unassigned', (assigneeCounts.get('unassigned') || 0) + 1);
+            continue;
+        }
+        for (const assigneeId of card.assignee_ids) {
+            assigneeCounts.set(assigneeId, (assigneeCounts.get(assigneeId) || 0) + 1);
+        }
+    }
+
+    const assigneeMax = Math.max(...Array.from(assigneeCounts.values()), 0);
+
+    return {
+        metrics: [
+            {label: 'Cards in view', value: String(totalCards), tone: 'neutral', hint: filtered ? 'Current filters applied' : 'Whole board'},
+            {label: 'Completed', value: String(doneCount), tone: 'accent', hint: totalCards === 0 ? '0%' : `${Math.round((doneCount / totalCards) * 100)}% done`},
+            {label: 'Overdue', value: String(overdueCount), tone: overdueCount > 0 ? 'danger' : 'neutral', hint: 'Open cards past due'},
+            {label: 'Due soon', value: String(dueSoonCount), tone: dueSoonCount > 0 ? 'warning' : 'neutral', hint: 'Due within 72 hours'},
+            {label: 'Milestones', value: String(milestoneCount), tone: milestoneCount > 0 ? 'accent' : 'neutral', hint: 'Flagged delivery anchors'},
+            {label: 'Avg progress', value: `${averageProgress}%`, tone: averageProgress >= 70 ? 'accent' : averageProgress >= 40 ? 'warning' : 'neutral', hint: 'Across visible cards'},
+            {label: 'Linked cards', value: String(blockedCardIds.size), tone: blockedCardIds.size > 0 ? 'warning' : 'neutral', hint: 'Cards in dependencies'},
+            {label: 'No dates', value: String(unscheduledCount), tone: unscheduledCount > 0 ? 'warning' : 'neutral', hint: 'Missing start and due dates'},
+        ],
+        status: columns.map((column) => {
+            const count = cards.filter((card) => card.column_id === column.id).length;
+            const ratio = totalCards === 0 ? 0 : Math.round((count / totalCards) * 100);
+            const overLimit = column.wip_limit > 0 && count > column.wip_limit;
+            return {
+                label: column.name,
+                value: ratio,
+                detail: `${count} cards${column.wip_limit > 0 ? ` · WIP ${column.wip_limit}` : ''}`,
+                tone: overLimit ? 'danger' : count > 0 ? 'accent' : 'neutral',
+            };
+        }),
+        priorities: priorityOrder.map((priority) => {
+            const count = cards.filter((card) => card.priority === priority).length;
+            const ratio = totalCards === 0 ? 0 : Math.round((count / totalCards) * 100);
+            return {
+                label: priority[0].toUpperCase() + priority.slice(1),
+                value: ratio,
+                detail: `${count} cards`,
+                tone: priority === 'urgent' ? 'danger' : priority === 'high' ? 'warning' : priority === 'normal' ? 'accent' : 'neutral',
+            };
+        }),
+        assignees: Array.from(assigneeCounts.entries()).sort((left, right) => right[1] - left[1]).slice(0, 6).map(([assigneeId, count]) => ({
+            label: assigneeId === 'unassigned' ? 'Unassigned' : formatUserName(assigneeId, usersById),
+            value: assigneeMax === 0 ? 0 : Math.round((count / assigneeMax) * 100),
+            detail: `${count} open cards`,
+            tone: count >= 5 ? 'danger' : count >= 3 ? 'warning' : 'accent',
+        })),
+        upcoming: openCards
+            .filter((card) => card.due_date)
+            .sort((left, right) => (left.due_date || '').localeCompare(right.due_date || ''))
+            .slice(0, 5)
+            .map((card) => {
+                const dueDate = card.due_date ? parseUtcDay(card.due_date) : null;
+                return {
+                    id: card.id,
+                    title: card.title,
+                    meta: `${card.due_date || 'No due'} · ${columnName(columns, card.column_id)}`,
+                    detail: summarizeCardPeople(card.assignee_ids, usersById),
+                    tone: dueDate && dueDate < today ? 'danger' : dueDate && dueDate < dueSoonLimit ? 'warning' : 'neutral',
+                };
+            }),
+        milestones: cards
+            .filter((card) => card.milestone)
+            .sort((left, right) => {
+                if (!left.due_date && !right.due_date) {
+                    return right.updated_at - left.updated_at;
+                }
+                return (left.due_date || '9999-12-31').localeCompare(right.due_date || '9999-12-31');
+            })
+            .slice(0, 5)
+            .map((card) => {
+                const dueDate = card.due_date ? parseUtcDay(card.due_date) : null;
+                return {
+                    id: card.id,
+                    title: card.title,
+                    meta: `${card.due_date || 'No due'} · ${card.progress}%`,
+                    detail: summarizeCardPeople(card.assignee_ids, usersById),
+                    tone: card.progress >= 100 ? 'accent' : dueDate && dueDate < dueSoonLimit ? 'warning' : 'neutral',
+                };
+            }),
+        activity: activity.slice(0, 6).map((item) => ({
+            id: item.id,
+            title: describeBoardActivity(item),
+            detail: formatUserName(item.actor_id, usersById),
+            timestamp: formatRelativeTime(item.created_at),
+        })),
+        filtered,
+    };
+}
+
+function hasActiveFilters(filters: BoardFilters) {
+    return Boolean(filters.query || filters.assignee_id || filters.label || filters.status || filters.date_from || filters.date_to);
+}
+
+function summarizeCardPeople(assigneeIds: string[], usersById: Record<string, FlowUser>) {
+    if (assigneeIds.length === 0) {
+        return 'No assignees';
+    }
+
+    return assigneeIds.slice(0, 2).map((assigneeId) => formatUserName(assigneeId, usersById)).join(', ');
+}
+
+function columnName(columns: BoardColumn[], columnId: string) {
+    return columns.find((column) => column.id === columnId)?.name || 'Column';
 }
 
 function canPatchBoardEvent(event: FlowStreamEvent) {

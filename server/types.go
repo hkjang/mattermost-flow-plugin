@@ -36,10 +36,11 @@ type Board struct {
 }
 
 type BoardSettings struct {
-	PostUpdates   bool   `json:"post_updates"`
-	PostDueSoon   bool   `json:"post_due_soon"`
-	AllowMentions bool   `json:"allow_mentions"`
-	DefaultView   string `json:"default_view"`
+	PostUpdates         bool   `json:"post_updates"`
+	PostDueSoon         bool   `json:"post_due_soon"`
+	AllowMentions       bool   `json:"allow_mentions"`
+	DefaultView         string `json:"default_view"`
+	CalendarFeedEnabled bool   `json:"calendar_feed_enabled"`
 }
 
 type BoardColumn struct {
@@ -154,6 +155,21 @@ type DueSoonNotification struct {
 	CardID     string `json:"card_id"`
 	DueDate    string `json:"due_date"`
 	NotifiedAt int64  `json:"notified_at"`
+}
+
+type BoardCalendarFeed struct {
+	BoardID   string `json:"board_id"`
+	Token     string `json:"token"`
+	UpdatedBy string `json:"updated_by"`
+	UpdatedAt int64  `json:"updated_at"`
+}
+
+type BoardCalendarFeedInfo struct {
+	Enabled      bool   `json:"enabled"`
+	HasToken     bool   `json:"has_token"`
+	DownloadURL  string `json:"download_url"`
+	SubscribeURL string `json:"subscribe_url,omitempty"`
+	UpdatedAt    int64  `json:"updated_at,omitempty"`
 }
 
 type BoardFilters struct {

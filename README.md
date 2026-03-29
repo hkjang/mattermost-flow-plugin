@@ -9,9 +9,10 @@ Live site: [hkjang.github.io/mattermost-flow-plugin](https://hkjang.github.io/ma
 ## Highlights
 
 - Team-scoped and channel-scoped boards with default columns: `Todo`, `In Progress`, `Review`, `Done`
-- Board and gantt views in one plugin, including drag-and-drop card movement and gantt date resizing
+- Board, dashboard, and gantt views in one plugin, including drag-and-drop card movement and gantt date resizing
 - Rich cards with assignees, labels, priority, dates, progress, milestone flag, checklist, comments, links, and dependencies
 - Board-scoped card templates for reusable release, bugfix, handoff, and milestone workflows
+- Board calendar export with authenticated `.ics` downloads and optional tokenized subscription links for external calendar clients
 - Mattermost-native collaboration with slash commands, channel header entry point, channel posts, mentions, deep links, and quick post actions
 - Plugin API, KV store persistence, and server-sent events for live board and sidebar updates
 
@@ -49,6 +50,7 @@ dist/com.mattermost.flow-plugin-<version>.tar.gz
 - Slash command: `/flow open`
 - Direct route: `/{team-name}/com.mattermost.flow-plugin/boards`
 - Shared board, gantt, and card deep links from the UI or Flow posts
+- Board calendar `.ics` downloads from the toolbar, with subscription links available in board settings
 
 ## Slash Commands
 
@@ -68,11 +70,11 @@ dist/com.mattermost.flow-plugin-<version>.tar.gz
 
 ## Architecture Summary
 
-- Web app: React + TypeScript plugin UI for board, gantt, filters, post UI, and real-time updates
+- Web app: React + TypeScript plugin UI for board, dashboard, gantt, filters, post UI, and real-time updates
 - Server plugin: Go service layer, custom API under `/plugins/com.mattermost.flow-plugin/api/v1`, authorization, KV storage, jobs, and Mattermost integration
-- Storage: Mattermost plugin KV store for boards, columns, cards, dependencies, activity logs, preferences, and due-soon notifications
+- Storage: Mattermost plugin KV store for boards, columns, cards, dependencies, activity logs, preferences, due-soon notifications, and calendar feed tokens
 - Reuse: board-scoped card templates saved with default labels, checklist, links, milestone state, and relative dates
-- Collaboration: Mattermost posts, mentions, post quick actions, slash commands, deep links, and SSE streams
+- Collaboration: Mattermost posts, mentions, post quick actions, slash commands, deep links, `.ics` calendar feeds, and SSE streams
 
 ## Development
 

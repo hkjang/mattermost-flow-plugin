@@ -2,7 +2,8 @@ export type BoardSettings = {
     post_updates: boolean;
     post_due_soon: boolean;
     allow_mentions: boolean;
-    default_view: 'board' | 'gantt';
+    calendar_feed_enabled: boolean;
+    default_view: 'board' | 'gantt' | 'dashboard';
 };
 
 export type Board = {
@@ -124,7 +125,7 @@ export type BoardFilters = {
 export type Preference = {
     user_id: string;
     board_id: string;
-    view_type: 'board' | 'gantt';
+    view_type: 'board' | 'gantt' | 'dashboard';
     filters: BoardFilters;
     zoom_level: 'day' | 'week' | 'month';
     updated_at: number;
@@ -145,6 +146,14 @@ export type BoardSummary = {
     columns: number;
     assignees: string[];
     recent_activity?: Activity;
+};
+
+export type BoardCalendarFeedInfo = {
+    enabled: boolean;
+    has_token: boolean;
+    download_url: string;
+    subscribe_url?: string;
+    updated_at?: number;
 };
 
 export type BoardBundle = {

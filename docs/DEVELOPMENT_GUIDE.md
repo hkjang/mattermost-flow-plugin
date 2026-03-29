@@ -37,7 +37,7 @@ Makefile                 Local build, test, deploy, and release helpers
 ### Web App
 
 - [webapp/src/index.tsx](../webapp/src/index.tsx): Mattermost plugin registration
-- [webapp/src/flow_page.tsx](../webapp/src/flow_page.tsx): main board and gantt experience
+- [webapp/src/flow_page.tsx](../webapp/src/flow_page.tsx): main board, dashboard, and gantt experience
 - [webapp/src/flow_post.tsx](../webapp/src/flow_post.tsx): custom post rendering and quick actions
 - [webapp/src/client.ts](../webapp/src/client.ts): plugin API client
 - [webapp/src/flow_sync.ts](../webapp/src/flow_sync.ts): same-tab and cross-tab sync bridge
@@ -81,6 +81,9 @@ Notable endpoints:
 - `GET /boards/{id}`
 - `PATCH /boards/{id}`
 - `DELETE /boards/{id}`
+- `GET /boards/{id}/calendar-feed`
+- `POST /boards/{id}/calendar-feed/rotate`
+- `GET /boards/{id}/calendar.ics`
 - `GET /boards/{id}/stream`
 - `GET /boards/summary/stream`
 - `GET /boards/{id}/cards`
@@ -97,6 +100,12 @@ Notable endpoints:
 
 Requests rely on Mattermost authentication headers and board scope authorization checks.
 
+In addition, the plugin exposes a tokenized public calendar route for external subscribers:
+
+```text
+/plugins/com.mattermost.flow-plugin/calendar/{boardId}.ics?token=...
+```
+
 ## Data Model
 
 Core entities:
@@ -109,8 +118,9 @@ Core entities:
 - `Activity`
 - `Preference`
 - `DueSoonNotification`
+- `BoardCalendarFeed`
 
-Data is stored in the Mattermost plugin KV store. Templates are stored per board alongside columns and cards. The code keeps board summaries, activity, and live updates close to the write path so sidebar and board views can patch themselves quickly without full refreshes.
+Data is stored in the Mattermost plugin KV store. Templates are stored per board alongside columns and cards, and calendar feed tokens are stored per board for external `.ics` subscriptions. The code keeps board summaries, activity, and live updates close to the write path so sidebar and board views can patch themselves quickly without full refreshes.
 
 ## Collaboration Features to Keep in Mind
 

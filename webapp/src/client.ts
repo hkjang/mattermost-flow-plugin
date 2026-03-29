@@ -1,6 +1,7 @@
 import manifest from './manifest';
 
 import type {
+    BoardCalendarFeedInfo,
     BoardBundle,
     BoardSummary,
     CardMoveResult,
@@ -94,6 +95,17 @@ export const flowClient = {
             method: 'PATCH',
             body: JSON.stringify(payload),
         });
+    },
+    getBoardCalendarFeed(boardId: string) {
+        return request<BoardCalendarFeedInfo>(`/boards/${boardId}/calendar-feed`);
+    },
+    rotateBoardCalendarFeed(boardId: string) {
+        return request<BoardCalendarFeedInfo>(`/boards/${boardId}/calendar-feed/rotate`, {
+            method: 'POST',
+        });
+    },
+    getBoardCalendarDownloadUrl(boardId: string) {
+        return `${API_ROOT}/boards/${boardId}/calendar.ics`;
     },
     deleteBoard(boardId: string) {
         return request<{status: string}>(`/boards/${boardId}`, {

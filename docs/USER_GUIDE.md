@@ -1,6 +1,6 @@
 # User Guide
 
-This guide is for Mattermost users who want to manage work inside Flow boards and gantt views.
+This guide is for Mattermost users who want to manage work inside Flow boards, dashboard views, and gantt views.
 
 ## Opening Flow
 
@@ -73,6 +73,35 @@ What you can do:
 - Open a card directly from the gantt row
 - Copy a shareable gantt link
 
+## Dashboard View
+
+The dashboard view gives you an at-a-glance operational summary for the current board.
+
+What you can see:
+
+- Summary metrics such as total cards, completed cards, overdue cards, due-soon cards, milestones, and average progress
+- Status distribution by column
+- Priority mix
+- Assignee load for open work
+- Upcoming due cards
+- Milestone cards
+- Recent board activity
+
+The dashboard respects the current filters, so you can narrow the metrics to one assignee, label, status, or date window.
+
+## Calendar Integration
+
+Flow can export scheduled cards as an iCalendar feed.
+
+What you can do:
+
+- Open the current board as a `.ics` calendar directly from the toolbar
+- Enable a shareable calendar subscription link from board settings
+- Paste the subscription URL into Google Calendar, Apple Calendar, or Outlook
+- Rotate the subscription token when you need to revoke an old shared link
+
+The public subscription URL is only available when a board admin enables the calendar feed in board settings.
+
 ## Card Detail
 
 Selecting a card opens its detail panel.
@@ -127,6 +156,7 @@ Use the built-in slash command for quick access:
 - Use a channel-scoped board when work is closely tied to one channel conversation stream.
 - Use a team-scoped board when multiple channels need the same planning surface.
 - Use shared board and card links in posts when you want others to jump into the exact context.
+- Use the calendar subscription URL when outside stakeholders need read-only schedule visibility in their calendar app.
 - Use due dates on cards so the gantt view and due-soon notifications stay meaningful.
 
 ## Troubleshooting
