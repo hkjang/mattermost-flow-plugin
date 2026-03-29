@@ -78,9 +78,11 @@ make logs
 
 - `GET /boards`
 - `POST /boards`
+- `POST /boards/import`
 - `GET /boards/{id}`
 - `PATCH /boards/{id}`
 - `DELETE /boards/{id}`
+- `GET /boards/{id}/export`
 - `GET /boards/{id}/calendar-feed`
 - `POST /boards/{id}/calendar-feed/rotate`
 - `GET /boards/{id}/diagnostics`

@@ -14,6 +14,7 @@ Live site: [hkjang.github.io/mattermost-flow-plugin](https://hkjang.github.io/ma
 - Board-scoped card templates for reusable release, bugfix, handoff, and milestone workflows
 - Board calendar export with authenticated `.ics` downloads and optional tokenized subscription links for external calendar clients
 - Admin-facing board diagnostics with consistency checks and a safe card reindex repair action
+- Board export/import tools for portable JSON backups and same-scope restore into a new board
 - Mattermost-native collaboration with slash commands, channel header entry point, channel posts, mentions, deep links, and quick post actions
 - Plugin API, KV store persistence, and server-sent events for live board and sidebar updates
 

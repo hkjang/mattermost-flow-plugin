@@ -235,6 +235,16 @@ type BoardBundle struct {
 	Summary      BoardSummary   `json:"summary"`
 }
 
+type BoardExportPackage struct {
+	Version      int            `json:"version"`
+	ExportedAt   int64          `json:"exported_at"`
+	SourceBoard  Board          `json:"source_board"`
+	Columns      []BoardColumn  `json:"columns"`
+	Templates    []CardTemplate `json:"templates"`
+	Cards        []Card         `json:"cards"`
+	Dependencies []Dependency   `json:"dependencies"`
+}
+
 type GanttViewData struct {
 	Board        Board         `json:"board"`
 	Columns      []BoardColumn `json:"columns"`
@@ -287,6 +297,14 @@ type UpdateBoardRequest struct {
 	Templates   *[]CardTemplateInput `json:"templates"`
 	Settings    *BoardSettings       `json:"settings"`
 	Version     *int64               `json:"version"`
+}
+
+type ImportBoardRequest struct {
+	TeamID       string             `json:"team_id"`
+	ChannelID    string             `json:"channel_id"`
+	Name         string             `json:"name"`
+	SetAsDefault bool               `json:"set_as_default"`
+	Package      BoardExportPackage `json:"package"`
 }
 
 type BoardColumnInput struct {

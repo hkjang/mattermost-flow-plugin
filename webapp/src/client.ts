@@ -4,6 +4,7 @@ import type {
     BoardCalendarFeedInfo,
     BoardDiagnosticsReport,
     BoardBundle,
+    BoardExportPackage,
     BoardSummary,
     CardMoveResult,
     CardMutationResult,
@@ -14,6 +15,7 @@ import type {
     DependencyMutationResult,
     Dependency,
     FlowUser,
+    ImportBoardRequest,
     MoveCardRequest,
     Preference,
     UpdateBoardRequest,
@@ -75,8 +77,17 @@ export const flowClient = {
             body: JSON.stringify(payload),
         });
     },
+    importBoard(payload: ImportBoardRequest) {
+        return request<BoardBundle>('/boards/import', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    },
     getBoard(boardId: string) {
         return request<BoardBundle>(`/boards/${boardId}`);
+    },
+    exportBoard(boardId: string) {
+        return request<BoardExportPackage>(`/boards/${boardId}/export`);
     },
     searchBoardUsers(boardId: string, options?: {term?: string; ids?: string[]; limit?: number}) {
         const query = new URLSearchParams();

@@ -443,6 +443,36 @@ textarea {
     gap: 12px;
 }
 
+.flow-data-panel {
+    display: grid;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid var(--flow-border);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(242, 249, 255, 0.92), rgba(255, 255, 255, 0.98));
+}
+
+.flow-data-panel__file {
+    position: relative;
+    overflow: hidden;
+}
+
+.flow-data-panel__file input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.flow-data-panel__hint {
+    display: grid;
+    gap: 4px;
+    align-self: end;
+    color: var(--flow-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
 .flow-template-editor__header,
 .flow-template-card__header {
     display: flex;

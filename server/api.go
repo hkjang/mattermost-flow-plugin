@@ -25,9 +25,11 @@ func (p *Plugin) initRouter() *mux.Router {
 	apiRouter.HandleFunc("/boards", p.handleListBoards).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/summary/stream", p.handleBoardSummaryStream).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards", p.handleCreateBoard).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/boards/import", p.handleImportBoard).Methods(http.MethodPost)
 	apiRouter.HandleFunc("/boards/{id}", p.handleGetBoard).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}", p.handleUpdateBoard).Methods(http.MethodPatch)
 	apiRouter.HandleFunc("/boards/{id}", p.handleDeleteBoard).Methods(http.MethodDelete)
+	apiRouter.HandleFunc("/boards/{id}/export", p.handleExportBoard).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}/calendar-feed", p.handleGetBoardCalendarFeed).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/{id}/calendar-feed/rotate", p.handleRotateBoardCalendarFeed).Methods(http.MethodPost)
 	apiRouter.HandleFunc("/boards/{id}/diagnostics", p.handleGetBoardDiagnostics).Methods(http.MethodGet)
@@ -127,6 +129,36 @@ func (p *Plugin) handleCreateBoard(w http.ResponseWriter, r *http.Request) {
 	p.writeJSON(w, http.StatusCreated, board)
 }
 
+func (p *Plugin) handleImportBoard(w http.ResponseWriter, r *http.Request) {
+	userID := p.getUserID(r)
+
+	var req ImportBoardRequest
+	if err := decodeJSON(r, &req); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	if err := p.authorizeScopeAdmin(userID, req.TeamID, req.ChannelID); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	board, err := p.service.ImportBoard(userID, req)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	p.publishBoardEvent(BoardStreamEvent{
+		BoardID:    board.Board.ID,
+		EntityType: "board",
+		Action:     "board.created",
+		ActorID:    userID,
+		Board:      &board.Board,
+	})
+	p.writeJSON(w, http.StatusCreated, board)
+}
+
 func (p *Plugin) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	userID := p.getUserID(r)
 	boardID := mux.Vars(r)["id"]
@@ -210,6 +242,29 @@ func (p *Plugin) handleDeleteBoard(w http.ResponseWriter, r *http.Request) {
 		Board:      &board,
 	})
 	p.writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (p *Plugin) handleExportBoard(w http.ResponseWriter, r *http.Request) {
+	userID := p.getUserID(r)
+	boardID := mux.Vars(r)["id"]
+
+	board, err := p.service.GetBoard(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+	if err := p.authorizeBoard(userID, board, true); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	exported, err := p.service.ExportBoard(boardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	p.writeJSON(w, http.StatusOK, exported)
 }
 
 func (p *Plugin) handleGetBoardCalendarFeed(w http.ResponseWriter, r *http.Request) {

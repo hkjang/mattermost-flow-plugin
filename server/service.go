@@ -1012,6 +1012,75 @@ func (s *FlowService) GetBoardDiagnostics(boardID string) (BoardDiagnosticsRepor
 	return buildBoardDiagnosticsReport(board, columns, templates, cards, dependencies, activity), nil
 }
 
+func (s *FlowService) ExportBoard(boardID string) (BoardExportPackage, error) {
+	bundle, err := s.GetBoardBundle(boardID, "")
+	if err != nil {
+		return BoardExportPackage{}, err
+	}
+
+	return BoardExportPackage{
+		Version:      1,
+		ExportedAt:   nowMillis(),
+		SourceBoard:  bundle.Board,
+		Columns:      bundle.Columns,
+		Templates:    bundle.Templates,
+		Cards:        bundle.Cards,
+		Dependencies: bundle.Dependencies,
+	}, nil
+}
+
+func (s *FlowService) ImportBoard(actorID string, req ImportBoardRequest) (*BoardBundle, error) {
+	if req.Package.Version <= 0 {
+		return nil, newValidationError("import package version is required")
+	}
+	if req.TeamID == "" && req.ChannelID == "" {
+		return nil, newValidationError("team_id or channel_id is required")
+	}
+
+	board, columns, templates, cards, dependencies, err := buildImportedBoardData(actorID, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.store.SaveBoard(board); err != nil {
+		return nil, err
+	}
+	if err := s.store.SaveColumns(board.ID, columns); err != nil {
+		return nil, err
+	}
+	if err := s.store.SaveTemplates(board.ID, templates); err != nil {
+		return nil, err
+	}
+	for _, card := range cards {
+		if err := s.store.SaveCard(card); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.store.SaveDependencies(board.ID, dependencies); err != nil {
+		return nil, err
+	}
+	if board.ChannelID != "" && req.SetAsDefault {
+		if err := s.store.SaveDefaultBoard(board.ChannelID, board.ID); err != nil {
+			return nil, err
+		}
+	}
+	if board.Settings.CalendarFeedEnabled {
+		if _, err := s.ensureBoardCalendarFeed(board.ID, actorID); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := s.store.AppendActivity(board.ID, newActivity(board.ID, "board", board.ID, "board.imported", actorID, nil, map[string]any{
+		"source_board_id":   req.Package.SourceBoard.ID,
+		"source_board_name": req.Package.SourceBoard.Name,
+		"cards":             len(cards),
+	})); err != nil {
+		return nil, err
+	}
+
+	return s.GetBoardBundle(board.ID, actorID)
+}
+
 func (s *FlowService) RepairBoard(actorID, boardID string) (BoardDiagnosticsReport, error) {
 	board, err := s.store.GetBoard(boardID)
 	if err != nil {
@@ -1329,6 +1398,159 @@ func buildBoardDiagnosticsReport(board Board, columns []BoardColumn, templates [
 		Healthy:         len(issues) == 0,
 		RepairAvailable: len(columns) > 0 && (len(orphanColumnCards) > 0 || len(duplicatePositionCards) > 0),
 	}
+}
+
+func buildImportedBoardData(actorID string, req ImportBoardRequest) (Board, []BoardColumn, []CardTemplate, []Card, []Dependency, error) {
+	source := req.Package
+	if source.SourceBoard.ID == "" && source.SourceBoard.Name == "" {
+		return Board{}, nil, nil, nil, nil, newValidationError("import package source_board is required")
+	}
+
+	now := nowMillis()
+	boardName := strings.TrimSpace(req.Name)
+	if boardName == "" {
+		boardName = strings.TrimSpace(source.SourceBoard.Name)
+	}
+	if boardName == "" {
+		boardName = "Imported board"
+	}
+
+	board := Board{
+		ID:          model.NewId(),
+		TeamID:      strings.TrimSpace(req.TeamID),
+		ChannelID:   strings.TrimSpace(req.ChannelID),
+		Name:        boardName,
+		Description: strings.TrimSpace(source.SourceBoard.Description),
+		Visibility:  normalizeVisibility(source.SourceBoard.Visibility, req.ChannelID),
+		AdminIDs:    appendUnique(normalizeUserIDs(source.SourceBoard.AdminIDs), actorID),
+		Settings:    normalizeBoardSettings(&source.SourceBoard.Settings),
+		CreatedBy:   actorID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Version:     1,
+	}
+
+	columnIDMap := make(map[string]string, len(source.Columns))
+	columns := make([]BoardColumn, 0, len(source.Columns))
+	for index, column := range source.Columns {
+		newID := model.NewId()
+		columnIDMap[column.ID] = newID
+		columns = append(columns, BoardColumn{
+			ID:        newID,
+			BoardID:   board.ID,
+			Name:      strings.TrimSpace(column.Name),
+			SortOrder: index,
+			WIPLimit:  column.WIPLimit,
+		})
+	}
+	if len(columns) == 0 {
+		columns = defaultColumns(board.ID)
+		for _, column := range columns {
+			columnIDMap[column.ID] = column.ID
+		}
+	}
+
+	templates := make([]CardTemplate, 0, len(source.Templates))
+	for _, template := range source.Templates {
+		createdAt := template.CreatedAt
+		if createdAt <= 0 {
+			createdAt = now
+		}
+		updatedAt := template.UpdatedAt
+		if updatedAt <= 0 {
+			updatedAt = now
+		}
+		templates = append(templates, CardTemplate{
+			ID:              model.NewId(),
+			BoardID:         board.ID,
+			Name:            strings.TrimSpace(template.Name),
+			Title:           strings.TrimSpace(template.Title),
+			Description:     strings.TrimSpace(template.Description),
+			Labels:          normalizeLabels(template.Labels),
+			Priority:        normalizePriority(template.Priority),
+			StartOffsetDays: cloneOptionalInt(template.StartOffsetDays),
+			DueOffsetDays:   cloneOptionalInt(template.DueOffsetDays),
+			Milestone:       template.Milestone,
+			Checklist:       cloneChecklistItems(template.Checklist),
+			AttachmentLinks: cloneAttachmentLinks(template.AttachmentLinks),
+			CreatedBy:       fallbackString(template.CreatedBy, actorID),
+			CreatedAt:       createdAt,
+			UpdatedAt:       updatedAt,
+		})
+	}
+
+	fallbackColumnID := columns[0].ID
+	cardIDMap := make(map[string]string, len(source.Cards))
+	cards := make([]Card, 0, len(source.Cards))
+	for _, card := range source.Cards {
+		newID := model.NewId()
+		cardIDMap[card.ID] = newID
+		columnID := fallbackColumnID
+		if mapped, ok := columnIDMap[card.ColumnID]; ok {
+			columnID = mapped
+		}
+		createdAt := card.CreatedAt
+		if createdAt <= 0 {
+			createdAt = now
+		}
+		updatedAt := card.UpdatedAt
+		if updatedAt <= 0 {
+			updatedAt = createdAt
+		}
+		nextCard := Card{
+			ID:              newID,
+			BoardID:         board.ID,
+			ColumnID:        columnID,
+			Title:           strings.TrimSpace(card.Title),
+			Description:     strings.TrimSpace(card.Description),
+			AssigneeIDs:     normalizeUserIDs(card.AssigneeIDs),
+			Labels:          normalizeLabels(card.Labels),
+			Priority:        normalizePriority(card.Priority),
+			StartDate:       normalizeDate(card.StartDate),
+			DueDate:         normalizeDate(card.DueDate),
+			Progress:        clampProgress(card.Progress),
+			Milestone:       card.Milestone,
+			Checklist:       cloneChecklistItems(card.Checklist),
+			AttachmentLinks: cloneAttachmentLinks(card.AttachmentLinks),
+			Comments:        cloneCardComments(card.Comments, newID, actorID, now),
+			Position:        card.Position,
+			CreatedBy:       fallbackString(card.CreatedBy, actorID),
+			UpdatedBy:       fallbackString(card.UpdatedBy, actorID),
+			CreatedAt:       createdAt,
+			UpdatedAt:       updatedAt,
+			Version:         1,
+		}
+		if err := validateDates(nextCard.StartDate, nextCard.DueDate); err != nil {
+			nextCard.StartDate = ""
+			nextCard.DueDate = ""
+		}
+		cards = append(cards, nextCard)
+	}
+	reindexCards(cards)
+
+	dependencies := make([]Dependency, 0, len(source.Dependencies))
+	for _, dependency := range source.Dependencies {
+		sourceCardID, okSource := cardIDMap[dependency.SourceCardID]
+		targetCardID, okTarget := cardIDMap[dependency.TargetCardID]
+		if !okSource || !okTarget || sourceCardID == targetCardID {
+			continue
+		}
+		createdAt := dependency.CreatedAt
+		if createdAt <= 0 {
+			createdAt = now
+		}
+		dependencies = append(dependencies, Dependency{
+			ID:           model.NewId(),
+			BoardID:      board.ID,
+			SourceCardID: sourceCardID,
+			TargetCardID: targetCardID,
+			Type:         normalizeDependencyType(dependency.Type),
+			CreatedBy:    fallbackString(dependency.CreatedBy, actorID),
+			CreatedAt:    createdAt,
+		})
+	}
+
+	return board, columns, templates, cards, dependencies, nil
 }
 
 func latestActivity(activity []Activity) *Activity {
@@ -1675,6 +1897,75 @@ func normalizeAttachmentLinks(links []AttachmentLink) []AttachmentLink {
 		next = append(next, link)
 	}
 	return next
+}
+
+func cloneOptionalInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	next := *value
+	return &next
+}
+
+func cloneChecklistItems(items []ChecklistItem) []ChecklistItem {
+	next := make([]ChecklistItem, 0, len(items))
+	for _, item := range items {
+		text := strings.TrimSpace(item.Text)
+		if text == "" {
+			continue
+		}
+		next = append(next, ChecklistItem{
+			ID:        model.NewId(),
+			Text:      text,
+			Completed: item.Completed,
+		})
+	}
+	return next
+}
+
+func cloneAttachmentLinks(links []AttachmentLink) []AttachmentLink {
+	next := make([]AttachmentLink, 0, len(links))
+	for _, link := range links {
+		url := strings.TrimSpace(link.URL)
+		if url == "" {
+			continue
+		}
+		next = append(next, AttachmentLink{
+			ID:    model.NewId(),
+			Title: strings.TrimSpace(link.Title),
+			URL:   url,
+		})
+	}
+	return next
+}
+
+func cloneCardComments(comments []CardComment, cardID, actorID string, fallbackTime int64) []CardComment {
+	next := make([]CardComment, 0, len(comments))
+	for _, comment := range comments {
+		message := strings.TrimSpace(comment.Message)
+		if message == "" {
+			continue
+		}
+		createdAt := comment.CreatedAt
+		if createdAt <= 0 {
+			createdAt = fallbackTime
+		}
+		next = append(next, CardComment{
+			ID:        model.NewId(),
+			CardID:    cardID,
+			UserID:    fallbackString(comment.UserID, actorID),
+			Message:   message,
+			CreatedAt: createdAt,
+		})
+	}
+	return next
+}
+
+func fallbackString(value, fallback string) string {
+	if strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(fallback)
 }
 
 func clampProgress(value int) int {

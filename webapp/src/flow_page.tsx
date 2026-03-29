@@ -35,6 +35,7 @@ import type {
     BoardDiagnosticsReport,
     BoardBundle,
     BoardColumn,
+    BoardExportPackage,
     BoardFilters,
     FlowBoardSummaryEvent,
     BoardSummary,
@@ -48,6 +49,7 @@ import type {
     DependencyMutationResult,
     FlowUser,
     FlowStreamEvent,
+    ImportBoardRequest,
 } from './types';
 import {UserPicker} from './user_picker';
 
@@ -138,6 +140,8 @@ export function FlowPage({context}: FlowPageProps) {
     const [calendarFeedInfo, setCalendarFeedInfo] = useState<BoardCalendarFeedInfo | null>(null);
     const [boardDiagnostics, setBoardDiagnostics] = useState<BoardDiagnosticsReport | null>(null);
     const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
+    const [importBoardName, setImportBoardName] = useState('');
+    const [importPayloadText, setImportPayloadText] = useState('');
     const liveRefreshTimerRef = useRef<number | null>(null);
     const pendingStreamEventsRef = useRef<Record<string, number>>({});
 
@@ -242,6 +246,8 @@ export function FlowPage({context}: FlowPageProps) {
         setNewCardTemplateId('');
         setCalendarFeedInfo(null);
         setBoardDiagnostics(null);
+        setImportBoardName('');
+        setImportPayloadText('');
     }, [selectedBoardId]);
 
     useEffect(() => {
@@ -965,6 +971,94 @@ export function FlowPage({context}: FlowPageProps) {
         }
     }
 
+    async function exportBoardPackage() {
+        if (!selectedBoard) {
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const payload = await flowClient.exportBoard(selectedBoard.id);
+            const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `${slugifyFileName(selectedBoard.name || 'flow-board')}-export.json`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(url);
+            setNotice('Board export downloaded.');
+        } catch (exportError) {
+            setError(getErrorMessage(exportError));
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    function handleImportFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const text = typeof reader.result === 'string' ? reader.result : '';
+            setImportPayloadText(text);
+            try {
+                const parsed = JSON.parse(text) as BoardExportPackage;
+                if (!importBoardName.trim()) {
+                    const baseName = parsed.source_board?.name?.trim() || 'Imported board';
+                    setImportBoardName(`${baseName} (Imported)`);
+                }
+            } catch {
+                // Keep the raw text so the user can correct it manually.
+            }
+        };
+        reader.readAsText(file);
+        event.target.value = '';
+    }
+
+    async function importBoardPackage() {
+        if (!selectedBoard) {
+            return;
+        }
+        if (!importPayloadText.trim()) {
+            setError('Import JSON is required.');
+            return;
+        }
+
+        let parsed: BoardExportPackage;
+        try {
+            parsed = JSON.parse(importPayloadText) as BoardExportPackage;
+        } catch {
+            setError('Import JSON could not be parsed.');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const payload: ImportBoardRequest = {
+                team_id: selectedBoard.team_id || context.teamId,
+                channel_id: selectedBoard.channel_id,
+                name: importBoardName.trim() || undefined,
+                set_as_default: false,
+                package: parsed,
+            };
+            const response = await flowClient.importBoard(payload);
+            setImportBoardName('');
+            setImportPayloadText('');
+            setBoardSettingsOpen(false);
+            setNotice('Board imported.');
+            await refreshBoards(response.board.id);
+        } catch (importError) {
+            setError(getErrorMessage(importError));
+        } finally {
+            setSaving(false);
+        }
+    }
+
     async function repairBoardDiagnostics() {
         if (!selectedBoard) {
             return;
@@ -1223,6 +1317,38 @@ export function FlowPage({context}: FlowPageProps) {
                                     </div>
                                 </>
                             )}
+                        </div>
+                        <div className='flow-data-panel'>
+                            <div className='flow-template-editor__header'>
+                                <div>
+                                    <strong>Board export and import</strong>
+                                    <span>Download a portable JSON backup of this board, or restore an exported board into the same scope as a new board.</span>
+                                </div>
+                                <div className='flow-calendar-panel__actions'>
+                                    <button className='flow-button' type='button' onClick={exportBoardPackage} disabled={saving}>Export JSON</button>
+                                    <label className='flow-button flow-data-panel__file'>
+                                        Load file
+                                        <input accept='.json,application/json' type='file' onChange={handleImportFileChange}/>
+                                    </label>
+                                </div>
+                            </div>
+                            <div className='flow-settings__grid'>
+                                <label>
+                                    Imported board name
+                                    <input value={importBoardName} onChange={(event) => setImportBoardName(event.target.value)} placeholder='Release board (Imported)'/>
+                                </label>
+                                <div className='flow-data-panel__hint'>
+                                    <strong>Target scope</strong>
+                                    <span>{selectedBoard.visibility === 'channel' ? 'This import will create a new board in the current channel scope.' : 'This import will create a new board in the current team scope.'}</span>
+                                </div>
+                                <label className='flow-settings__wide'>
+                                    Import JSON
+                                    <textarea rows={8} value={importPayloadText} onChange={(event) => setImportPayloadText(event.target.value)} placeholder='Paste a board export package here or load a JSON file.'/>
+                                </label>
+                            </div>
+                            <div className='flow-settings__actions'>
+                                <button className='flow-button flow-button--primary' type='button' onClick={importBoardPackage} disabled={saving || !importPayloadText.trim()}>Import as new board</button>
+                            </div>
                         </div>
                         <div className='flow-template-editor'>
                             <div className='flow-template-editor__header'>
@@ -1701,6 +1827,10 @@ function getErrorMessage(error: unknown) {
 
 function formatInputDate(date: Date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function slugifyFileName(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'flow-board';
 }
 
 function shiftDayString(value: string, deltaDays: number) {
@@ -2233,6 +2363,8 @@ function describeBoardActivity(activity: Activity) {
         return 'Board created';
     case 'board.updated':
         return 'Board settings updated';
+    case 'board.imported':
+        return 'Board imported';
     case 'board.reindexed':
         return 'Board cards reindexed';
     case 'board.calendar.rotated':

@@ -91,6 +91,14 @@ Board owners can open `Board settings` and use the diagnostics panel to inspect:
 
 If the report marks `Reindex cards` as available, the repair action will safely normalize card ordering and move orphaned cards into the first valid column.
 
+### Board Export and Import
+
+Board owners can also use `Board settings` to move data safely between environments or scopes.
+
+- `Export JSON` downloads a portable board package with columns, templates, cards, comments, and dependencies
+- `Import as new board` restores an exported package into the current team or channel scope without overwriting the existing board
+- Imported boards receive fresh internal IDs and a new calendar token if calendar integration is enabled
+
 ### Executable Permissions in Release Bundles
 
 Release archives are packaged so that files under `server/dist/` are stored with executable mode `0755`. This avoids the common issue where Mattermost extracts a plugin bundle but the server binary is not runnable on Linux or macOS hosts.
@@ -102,8 +110,9 @@ Release archives are packaged so that files under `server/dist/` are stored with
 3. Verify board view, gantt view, slash commands, and channel posts.
 4. Open board settings and confirm diagnostics look healthy.
 5. If you use external calendars, validate the `.ics` download and subscription URL.
-6. Enable the plugin in production.
-7. Share user guidance and preferred board conventions with team owners.
+6. If you plan to seed production from staging, validate board export/import on a sample board.
+7. Enable the plugin in production.
+8. Share user guidance and preferred board conventions with team owners.
 
 ## Upgrade and Rollback
 
@@ -144,6 +153,12 @@ Because Flow stores data in KV, keep plugin versions reasonably close when rolli
 
 - Confirm `calendar_feed_enabled` is enabled in board settings
 - If an old shared link should stop working, rotate the token in board settings and distribute the new link
+
+### Board import fails
+
+- Confirm the imported file is a Flow board export JSON package
+- Confirm you are importing into a team or channel scope where you have admin rights
+- If the package was edited manually, verify the JSON is still valid
 
 ## Related Documents
 

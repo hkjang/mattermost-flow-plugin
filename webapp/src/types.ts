@@ -199,6 +199,16 @@ export type BoardBundle = {
     summary: BoardSummary;
 };
 
+export type BoardExportPackage = {
+    version: number;
+    exported_at: number;
+    source_board: Board;
+    columns: BoardColumn[];
+    templates: CardTemplate[];
+    cards: Card[];
+    dependencies: Dependency[];
+};
+
 export type GanttViewData = {
     board: Board;
     columns: BoardColumn[];
@@ -273,6 +283,14 @@ export type UpdateBoardRequest = Partial<{
     settings: BoardSettings;
     version: number;
 }>;
+
+export type ImportBoardRequest = {
+    team_id?: string;
+    channel_id?: string;
+    name?: string;
+    set_as_default: boolean;
+    package: BoardExportPackage;
+};
 
 export type CreateCardRequest = {
     board_id: string;
