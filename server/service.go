@@ -72,6 +72,11 @@ func (s *FlowService) GetBoardBundle(boardID, userID string) (*BoardBundle, erro
 		return nil, err
 	}
 
+	templates, err := s.store.GetTemplates(boardID)
+	if err != nil {
+		return nil, err
+	}
+
 	cards, err := s.store.ListCards(boardID)
 	if err != nil {
 		return nil, err
@@ -104,6 +109,7 @@ func (s *FlowService) GetBoardBundle(boardID, userID string) (*BoardBundle, erro
 	return &BoardBundle{
 		Board:        board,
 		Columns:      columns,
+		Templates:    templates,
 		Cards:        cards,
 		Dependencies: dependencies,
 		Activity:     activity,
@@ -147,6 +153,15 @@ func (s *FlowService) CreateBoard(actorID string, req CreateBoardRequest) (*Boar
 	}
 	if err := s.store.SaveColumns(board.ID, columns); err != nil {
 		return nil, err
+	}
+	if len(req.Templates) > 0 {
+		templates, err := normalizeTemplates(req.Templates, board.ID, actorID, nil)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.store.SaveTemplates(board.ID, templates); err != nil {
+			return nil, err
+		}
 	}
 	if board.ChannelID != "" && req.SetAsDefault {
 		if err := s.store.SaveDefaultBoard(board.ChannelID, board.ID); err != nil {
@@ -198,6 +213,11 @@ func (s *FlowService) UpdateBoard(actorID, boardID string, req UpdateBoardReques
 
 	if req.Columns != nil {
 		if err := s.updateColumns(board.ID, *req.Columns); err != nil {
+			return nil, err
+		}
+	}
+	if req.Templates != nil {
+		if err := s.updateTemplates(board.ID, *req.Templates, actorID); err != nil {
 			return nil, err
 		}
 	}
@@ -995,6 +1015,20 @@ func (s *FlowService) updateColumns(boardID string, inputs []BoardColumnInput) e
 	return nil
 }
 
+func (s *FlowService) updateTemplates(boardID string, inputs []CardTemplateInput, actorID string) error {
+	existingTemplates, err := s.store.GetTemplates(boardID)
+	if err != nil {
+		return err
+	}
+
+	nextTemplates, err := normalizeTemplates(inputs, boardID, actorID, existingTemplates)
+	if err != nil {
+		return err
+	}
+
+	return s.store.SaveTemplates(boardID, nextTemplates)
+}
+
 func buildBoardSummary(board Board, cards []Card, columns []BoardColumn, isDefault bool, recentActivity *Activity) BoardSummary {
 	now := time.Now().UTC()
 	assignees := make([]string, 0)
@@ -1083,6 +1117,79 @@ func normalizeColumns(inputs []BoardColumnInput, boardID string) []BoardColumn {
 	return columns
 }
 
+func normalizeTemplates(inputs []CardTemplateInput, boardID, actorID string, existing []CardTemplate) ([]CardTemplate, error) {
+	if len(inputs) == 0 {
+		return []CardTemplate{}, nil
+	}
+
+	existingByID := make(map[string]CardTemplate, len(existing))
+	for _, template := range existing {
+		existingByID[template.ID] = template
+	}
+
+	now := nowMillis()
+	templates := make([]CardTemplate, 0, len(inputs))
+
+	for _, input := range inputs {
+		name := strings.TrimSpace(input.Name)
+		if name == "" {
+			continue
+		}
+
+		startOffsetDays, err := normalizeTemplateOffset(input.StartOffsetDays)
+		if err != nil {
+			return nil, err
+		}
+
+		dueOffsetDays, err := normalizeTemplateOffset(input.DueOffsetDays)
+		if err != nil {
+			return nil, err
+		}
+
+		if startOffsetDays != nil && dueOffsetDays != nil && *dueOffsetDays < *startOffsetDays {
+			return nil, newValidationError("template due_offset_days must be on or after start_offset_days")
+		}
+
+		templateID := strings.TrimSpace(input.ID)
+		createdBy := actorID
+		createdAt := now
+		if previous, ok := existingByID[templateID]; ok {
+			createdBy = previous.CreatedBy
+			createdAt = previous.CreatedAt
+		}
+		if templateID == "" {
+			templateID = model.NewId()
+		}
+
+		templates = append(templates, CardTemplate{
+			ID:              templateID,
+			BoardID:         boardID,
+			Name:            name,
+			Title:           strings.TrimSpace(input.Title),
+			Description:     strings.TrimSpace(input.Description),
+			Labels:          normalizeLabels(input.Labels),
+			Priority:        normalizePriority(input.Priority),
+			StartOffsetDays: startOffsetDays,
+			DueOffsetDays:   dueOffsetDays,
+			Milestone:       input.Milestone,
+			Checklist:       normalizeChecklist(input.Checklist),
+			AttachmentLinks: normalizeAttachmentLinks(input.AttachmentLinks),
+			CreatedBy:       createdBy,
+			CreatedAt:       createdAt,
+			UpdatedAt:       now,
+		})
+	}
+
+	sort.Slice(templates, func(i, j int) bool {
+		if templates[i].UpdatedAt == templates[j].UpdatedAt {
+			return templates[i].Name < templates[j].Name
+		}
+		return templates[i].UpdatedAt > templates[j].UpdatedAt
+	})
+
+	return templates, nil
+}
+
 func validateDates(startDate, dueDate string) error {
 	start, okStart := parseDay(startDate)
 	due, okDue := parseDay(dueDate)
@@ -1104,6 +1211,22 @@ func normalizeDate(value string) string {
 		return parsed.Format("2006-01-02")
 	}
 	return ""
+}
+
+func normalizeTemplateOffset(value *int) (*int, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	if *value < 0 {
+		return nil, newValidationError("template offsets cannot be negative")
+	}
+
+	offset := *value
+	if offset > 365 {
+		offset = 365
+	}
+	return &offset, nil
 }
 
 func parseDay(value string) (time.Time, bool) {

@@ -102,6 +102,12 @@
     gap: 12px;
 }
 
+.flow-template-editor,
+.flow-template-card {
+    display: grid;
+    gap: 12px;
+}
+
 .flow-creation label,
 .flow-settings label,
 .flow-filterbar label,
@@ -325,6 +331,40 @@ textarea {
 
 .flow-quick-create__wide {
     grid-column: 1 / -1;
+}
+
+.flow-template-editor {
+    padding-top: 8px;
+    border-top: 1px solid var(--flow-border);
+}
+
+.flow-template-editor__header,
+.flow-template-card__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+}
+
+.flow-template-editor__header span {
+    display: block;
+    margin-top: 4px;
+    color: var(--center-channel-color-64);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.flow-template-card {
+    padding: 14px;
+    border: 1px solid var(--flow-border);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.55);
+}
+
+.flow-template-hint {
+    color: var(--center-channel-color-72);
+    font-size: 12px;
+    font-weight: 600;
 }
 
 .flow-layout {

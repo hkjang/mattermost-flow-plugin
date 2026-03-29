@@ -103,13 +103,14 @@ Core entities:
 
 - `Board`
 - `BoardColumn`
+- `CardTemplate`
 - `Card`
 - `Dependency`
 - `Activity`
 - `Preference`
 - `DueSoonNotification`
 
-Data is stored in the Mattermost plugin KV store. The code keeps board summaries, activity, and live updates close to the write path so sidebar and board views can patch themselves quickly without full refreshes.
+Data is stored in the Mattermost plugin KV store. Templates are stored per board alongside columns and cards. The code keeps board summaries, activity, and live updates close to the write path so sidebar and board views can patch themselves quickly without full refreshes.
 
 ## Collaboration Features to Keep in Mind
 

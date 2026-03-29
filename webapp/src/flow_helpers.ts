@@ -5,6 +5,8 @@ import type {
     BoardColumnInput,
     BoardFilters,
     Card,
+    CardTemplate,
+    CardTemplateInput,
     ChecklistItem,
 } from './types';
 
@@ -16,7 +18,22 @@ export type BoardSettingsDraft = {
     allowMentions: boolean;
     defaultView: 'board' | 'gantt';
     columnsText: string;
+    templates: CardTemplateDraft[];
     version: number;
+};
+
+export type CardTemplateDraft = {
+    id?: string;
+    name: string;
+    title: string;
+    description: string;
+    labelsText: string;
+    priority: Card['priority'];
+    startOffsetDays: string;
+    dueOffsetDays: string;
+    milestone: boolean;
+    checklistText: string;
+    linksText: string;
 };
 
 export type CardEditorDraft = {
@@ -75,6 +92,7 @@ export function createBoardSettingsDraft(bundle: BoardBundle): BoardSettingsDraf
         allowMentions: bundle.board.settings.allow_mentions,
         defaultView: bundle.board.settings.default_view,
         columnsText: bundle.columns.map((column) => `${column.name}|${column.wip_limit || 0}`).join('\n'),
+        templates: bundle.templates.map(createTemplateDraft),
         version: bundle.board.version,
     };
 }
@@ -106,6 +124,43 @@ export function createColumnInputs(columnsText: string, existingColumns: BoardCo
             wip_limit: Number((wipPart || '0').trim()) || 0,
         };
     }).filter((column) => column.name);
+}
+
+export function createTemplateDraft(template?: CardTemplate): CardTemplateDraft {
+    return {
+        id: template?.id,
+        name: template?.name || '',
+        title: template?.title || '',
+        description: template?.description || '',
+        labelsText: template?.labels.join(', ') || '',
+        priority: template?.priority || 'normal',
+        startOffsetDays: template?.start_offset_days === undefined ? '' : String(template.start_offset_days),
+        dueOffsetDays: template?.due_offset_days === undefined ? '' : String(template.due_offset_days),
+        milestone: template?.milestone || false,
+        checklistText: template?.checklist.map((item) => `${item.completed ? '[x]' : '[ ]'} ${item.text}`).join('\n') || '',
+        linksText: template?.attachment_links.map((link) => `${link.title || 'Link'}|${link.url}`).join('\n') || '',
+    };
+}
+
+export function createTemplateInputs(templates: CardTemplateDraft[]): CardTemplateInput[] {
+    return templates.map((template) => {
+        const startOffsetDays = parseOptionalInteger(template.startOffsetDays);
+        const dueOffsetDays = parseOptionalInteger(template.dueOffsetDays);
+
+        return {
+            id: template.id,
+            name: template.name.trim(),
+            title: template.title.trim(),
+            description: template.description.trim(),
+            labels: splitCommaValues(template.labelsText),
+            priority: template.priority,
+            start_offset_days: startOffsetDays,
+            due_offset_days: dueOffsetDays,
+            milestone: template.milestone,
+            checklist: parseChecklist(template.checklistText, []),
+            attachment_links: parseLinks(template.linksText, []),
+        };
+    }).filter((template) => template.name);
 }
 
 export function splitCommaValues(value: string) {
@@ -371,4 +426,18 @@ function stripTime(date: Date) {
     const next = new Date(date);
     next.setHours(0, 0, 0, 0);
     return next;
+}
+
+function parseOptionalInteger(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+        return undefined;
+    }
+
+    return Math.max(0, Math.trunc(parsed));
 }

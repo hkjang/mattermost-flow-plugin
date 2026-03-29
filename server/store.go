@@ -23,6 +23,8 @@ type FlowStore interface {
 	DeleteBoard(boardID string) error
 	GetColumns(boardID string) ([]BoardColumn, error)
 	SaveColumns(boardID string, columns []BoardColumn) error
+	GetTemplates(boardID string) ([]CardTemplate, error)
+	SaveTemplates(boardID string, templates []CardTemplate) error
 	ListCards(boardID string) ([]Card, error)
 	GetCard(boardID, cardID string) (Card, error)
 	GetCardBoardID(cardID string) (string, error)
@@ -59,6 +61,10 @@ func boardKey(boardID string) string {
 
 func boardColumnsKey(boardID string) string {
 	return fmt.Sprintf("board:%s:columns", boardID)
+}
+
+func boardTemplatesKey(boardID string) string {
+	return fmt.Sprintf("board:%s:templates", boardID)
 }
 
 func boardCardIDsKey(boardID string) string {
@@ -262,6 +268,7 @@ func (s *kvStore) DeleteBoard(boardID string) error {
 	keys := []string{
 		boardKey(boardID),
 		boardColumnsKey(boardID),
+		boardTemplatesKey(boardID),
 		boardCardIDsKey(boardID),
 		boardDepsKey(boardID),
 		boardActivityKey(boardID),
@@ -327,6 +334,21 @@ func (s *kvStore) GetColumns(boardID string) ([]BoardColumn, error) {
 
 func (s *kvStore) SaveColumns(boardID string, columns []BoardColumn) error {
 	return s.saveJSON(boardColumnsKey(boardID), columns)
+}
+
+func (s *kvStore) GetTemplates(boardID string) ([]CardTemplate, error) {
+	var templates []CardTemplate
+	if err := s.loadJSON(boardTemplatesKey(boardID), &templates); err != nil {
+		if isNotFound(err) {
+			return []CardTemplate{}, nil
+		}
+		return nil, err
+	}
+	return templates, nil
+}
+
+func (s *kvStore) SaveTemplates(boardID string, templates []CardTemplate) error {
+	return s.saveJSON(boardTemplatesKey(boardID), templates)
 }
 
 func (s *kvStore) ListCards(boardID string) ([]Card, error) {

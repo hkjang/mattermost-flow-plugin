@@ -45,6 +45,21 @@ Cards can include:
 - Attachment links
 - Comments
 
+## Card Templates
+
+Board admins can save reusable card templates from board settings.
+
+Templates can prefill:
+
+- Card title and description
+- Labels and priority
+- Relative start and due dates
+- Milestone state
+- Checklist items
+- Attachment links
+
+In the quick-create bar, pick a template first and then adjust the title, due date, assignees, or priority before creating the card.
+
 ## Gantt View
 
 The gantt view uses the same cards and dates as the board view.

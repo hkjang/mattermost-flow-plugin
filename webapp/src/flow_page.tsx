@@ -11,6 +11,8 @@ import {
     createBoardSettingsDraft,
     createCardDraft,
     createColumnInputs,
+    createTemplateDraft,
+    createTemplateInputs,
     findCardTitle,
     formatDateTime,
     getScheduledRange,
@@ -33,6 +35,7 @@ import type {
     FlowBoardSummaryEvent,
     BoardSummary,
     Card,
+    CardTemplate,
     CardMoveResult,
     CardMutationResult,
     CommentMutationResult,
@@ -74,6 +77,7 @@ export function FlowPage({context}: FlowPageProps) {
     const [newCardAssigneeIds, setNewCardAssigneeIds] = useState<string[]>([]);
     const [newCardPriority, setNewCardPriority] = useState<Card['priority']>('normal');
     const [newCardMilestone, setNewCardMilestone] = useState(false);
+    const [newCardTemplateId, setNewCardTemplateId] = useState('');
     const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
     const [boardSettingsDraft, setBoardSettingsDraft] = useState<BoardSettingsDraft | null>(null);
     const [cardDraft, setCardDraft] = useState<CardEditorDraft | null>(null);
@@ -188,6 +192,7 @@ export function FlowPage({context}: FlowPageProps) {
     useEffect(() => {
         setUsersById({});
         setNewCardAssigneeIds([]);
+        setNewCardTemplateId('');
     }, [selectedBoardId]);
 
     useEffect(() => {
@@ -208,12 +213,20 @@ export function FlowPage({context}: FlowPageProps) {
     const selectedCard = boardData?.cards.find((card) => card.id === selectedCardId) || null;
     const cards = boardData?.cards || [];
     const columns = boardData?.columns || [];
+    const templates = boardData?.templates || [];
     const dependencies = boardData?.dependencies || [];
     const visibleCards = getVisibleCards(cards, columns, filters, sortMode);
     const groupedCards = groupCardsByColumn(visibleCards);
     const ganttCards = visibleCards.length > 0 ? visibleCards : cards;
     const ganttUnits = buildGanttUnits(ganttCards, zoomLevel);
     const boardAssignees = collectAssigneeUsers(cards, usersById);
+    const selectedTemplate = templates.find((template) => template.id === newCardTemplateId) || null;
+
+    useEffect(() => {
+        if (newCardTemplateId && !templates.some((template) => template.id === newCardTemplateId)) {
+            setNewCardTemplateId('');
+        }
+    }, [newCardTemplateId, templates]);
     const mergeUsers = useCallback((users: FlowUser[]) => {
         if (users.length === 0) {
             return;
@@ -319,6 +332,58 @@ export function FlowPage({context}: FlowPageProps) {
         setBoardSettingsDraft(createBoardSettingsDraft(response));
         setPreferencesReady(true);
     }, [selectedBoardId]);
+
+    function updateTemplateDraft(index: number, patch: Partial<BoardSettingsDraft['templates'][number]>) {
+        if (!boardSettingsDraft) {
+            return;
+        }
+
+        setBoardSettingsDraft({
+            ...boardSettingsDraft,
+            templates: boardSettingsDraft.templates.map((template, templateIndex) => (
+                templateIndex === index ? {...template, ...patch} : template
+            )),
+        });
+    }
+
+    function addTemplateDraft() {
+        if (!boardSettingsDraft) {
+            return;
+        }
+
+        setBoardSettingsDraft({
+            ...boardSettingsDraft,
+            templates: [...boardSettingsDraft.templates, createTemplateDraft()],
+        });
+    }
+
+    function removeTemplateDraft(index: number) {
+        if (!boardSettingsDraft) {
+            return;
+        }
+
+        setBoardSettingsDraft({
+            ...boardSettingsDraft,
+            templates: boardSettingsDraft.templates.filter((_, templateIndex) => templateIndex !== index),
+        });
+    }
+
+    function applyTemplateSelection(templateId: string) {
+        setNewCardTemplateId(templateId);
+        if (!templateId) {
+            return;
+        }
+
+        const template = templates.find((item) => item.id === templateId);
+        if (!template) {
+            return;
+        }
+
+        setNewCardTitle(template.title || '');
+        setNewCardPriority(template.priority);
+        setNewCardMilestone(template.milestone);
+        setNewCardDueDate(resolveTemplateDate(template.due_offset_days));
+    }
 
     const scheduleLiveRefresh = useCallback((message: {boardId: string; action: string; refreshBoard?: boolean; refreshBoardList?: boolean}) => {
         if (liveRefreshTimerRef.current !== null) {
@@ -508,6 +573,7 @@ export function FlowPage({context}: FlowPageProps) {
                 name: boardSettingsDraft.name,
                 description: boardSettingsDraft.description,
                 columns: createColumnInputs(boardSettingsDraft.columnsText, boardData.columns),
+                templates: createTemplateInputs(boardSettingsDraft.templates),
                 settings: {
                     post_updates: boardSettingsDraft.postUpdates,
                     post_due_soon: boardSettingsDraft.postDueSoon,
@@ -531,34 +597,43 @@ export function FlowPage({context}: FlowPageProps) {
 
     async function createCard(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (!boardData || !newCardTitle.trim() || boardData.columns.length === 0) {
+        if (!boardData || boardData.columns.length === 0) {
             return;
         }
+
+        const template = boardData.templates.find((item) => item.id === newCardTemplateId) || null;
+        const title = newCardTitle.trim() || template?.title || '';
+        if (!title) {
+            setError('Card title is required.');
+            return;
+        }
+
         setSaving(true);
         try {
             const response = await flowClient.createCard({
                 board_id: boardData.board.id,
                 column_id: boardData.columns[0].id,
-                title: newCardTitle.trim(),
-                description: '',
+                title,
+                description: template?.description || '',
                 assignee_ids: newCardAssigneeIds,
-                labels: [],
+                labels: template?.labels || [],
                 priority: newCardPriority,
-                start_date: '',
-                due_date: newCardDueDate || '',
+                start_date: resolveTemplateDate(template?.start_offset_days),
+                due_date: newCardDueDate || resolveTemplateDate(template?.due_offset_days),
                 progress: 0,
                 milestone: newCardMilestone,
-                checklist: [],
-                attachment_links: [],
+                checklist: cloneChecklist(template?.checklist || []),
+                attachment_links: cloneAttachmentLinks(template?.attachment_links || []),
             });
             setNewCardTitle('');
             setNewCardDueDate('');
             setNewCardAssigneeIds([]);
             setNewCardPriority('normal');
             setNewCardMilestone(false);
+            setNewCardTemplateId('');
             setBoardData((current) => applyCardMutation(current, response));
             rememberLocalEvent(response.board.id, 'card.created', response.card.id);
-            setNotice('Card created.');
+            setNotice(template ? `Card created from template "${template.name}".` : 'Card created.');
         } catch (createError) {
             setError(getErrorMessage(createError));
         } finally {
@@ -866,7 +941,7 @@ export function FlowPage({context}: FlowPageProps) {
                     <form className='flow-settings' onSubmit={updateBoardSettings}>
                         <div className='flow-settings__header'>
                             <strong>Board settings</strong>
-                            <span>Columns, notifications, and default view</span>
+                            <span>Columns, notifications, default view, and templates</span>
                         </div>
                         <div className='flow-settings__grid'>
                             <label>
@@ -894,6 +969,71 @@ export function FlowPage({context}: FlowPageProps) {
                             <label><input checked={boardSettingsDraft.postDueSoon} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, postDueSoon: event.target.checked})} type='checkbox'/> Post due soon alerts</label>
                             <label><input checked={boardSettingsDraft.allowMentions} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, allowMentions: event.target.checked})} type='checkbox'/> Allow mentions</label>
                         </div>
+                        <div className='flow-template-editor'>
+                            <div className='flow-template-editor__header'>
+                                <div>
+                                    <strong>Card templates</strong>
+                                    <span>Save reusable card defaults for release, bugfix, handoff, and milestone work.</span>
+                                </div>
+                                <button className='flow-button' type='button' onClick={addTemplateDraft}>Add template</button>
+                            </div>
+                            {boardSettingsDraft.templates.length === 0 && <div className='flow-empty'>No templates yet.</div>}
+                            {boardSettingsDraft.templates.map((template, index) => (
+                                <div className='flow-template-card' key={template.id || `template-${index}`}>
+                                    <div className='flow-template-card__header'>
+                                        <strong>{template.name || `Template ${index + 1}`}</strong>
+                                        <button className='flow-button' type='button' onClick={() => removeTemplateDraft(index)}>Remove</button>
+                                    </div>
+                                    <div className='flow-settings__grid'>
+                                        <label>
+                                            Template name
+                                            <input value={template.name} onChange={(event) => updateTemplateDraft(index, {name: event.target.value})} placeholder='Release checklist'/>
+                                        </label>
+                                        <label>
+                                            Default title
+                                            <input value={template.title} onChange={(event) => updateTemplateDraft(index, {title: event.target.value})} placeholder='Ship release'/>
+                                        </label>
+                                        <label className='flow-settings__wide'>
+                                            Description
+                                            <textarea rows={3} value={template.description} onChange={(event) => updateTemplateDraft(index, {description: event.target.value})} placeholder='Default scope, exit criteria, or handoff notes'/>
+                                        </label>
+                                        <label>
+                                            Priority
+                                            <select value={template.priority} onChange={(event) => updateTemplateDraft(index, {priority: event.target.value as Card['priority']})}>
+                                                <option value='urgent'>Urgent</option>
+                                                <option value='high'>High</option>
+                                                <option value='normal'>Normal</option>
+                                                <option value='low'>Low</option>
+                                            </select>
+                                        </label>
+                                        <label>
+                                            Start offset (days)
+                                            <input type='number' min='0' max='365' value={template.startOffsetDays} onChange={(event) => updateTemplateDraft(index, {startOffsetDays: event.target.value})} placeholder='0'/>
+                                        </label>
+                                        <label>
+                                            Due offset (days)
+                                            <input type='number' min='0' max='365' value={template.dueOffsetDays} onChange={(event) => updateTemplateDraft(index, {dueOffsetDays: event.target.value})} placeholder='3'/>
+                                        </label>
+                                        <label className='flow-settings__wide'>
+                                            Labels
+                                            <input value={template.labelsText} onChange={(event) => updateTemplateDraft(index, {labelsText: event.target.value})} placeholder='release, qa, docs'/>
+                                        </label>
+                                        <label className='flow-settings__wide flow-inline-checkbox'>
+                                            <input checked={template.milestone} onChange={(event) => updateTemplateDraft(index, {milestone: event.target.checked})} type='checkbox'/>
+                                            Mark cards from this template as milestones
+                                        </label>
+                                        <label className='flow-settings__wide'>
+                                            Checklist
+                                            <textarea rows={4} value={template.checklistText} onChange={(event) => updateTemplateDraft(index, {checklistText: event.target.value})} placeholder='[ ] Draft release notes&#10;[ ] Validate migration&#10;[ ] Announce in channel'/>
+                                        </label>
+                                        <label className='flow-settings__wide'>
+                                            Links
+                                            <textarea rows={3} value={template.linksText} onChange={(event) => updateTemplateDraft(index, {linksText: event.target.value})} placeholder='Runbook|https://example.com/runbook'/>
+                                        </label>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                         <div className='flow-settings__actions'>
                             <button className='flow-button flow-button--primary' type='submit' disabled={saving}>Save</button>
                             <button className='flow-button' type='button' onClick={() => setBoardSettingsOpen(false)}>Close</button>
@@ -913,11 +1053,23 @@ export function FlowPage({context}: FlowPageProps) {
                         </div>
 
                         <form className='flow-quick-create' onSubmit={createCard}>
+                            <label>
+                                Template
+                                <select value={newCardTemplateId} onChange={(event) => applyTemplateSelection(event.target.value)} disabled={saving || templates.length === 0}>
+                                    <option value=''>Blank card</option>
+                                    {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+                                </select>
+                            </label>
                             <input value={newCardTitle} onChange={(event) => setNewCardTitle(event.target.value)} placeholder='New card title'/>
                             <input type='date' value={newCardDueDate} onChange={(event) => setNewCardDueDate(event.target.value)}/>
                             <select value={newCardPriority} onChange={(event) => setNewCardPriority(event.target.value as Card['priority'])}><option value='normal'>Normal</option><option value='high'>High</option><option value='urgent'>Urgent</option><option value='low'>Low</option></select>
                             <label className='flow-inline-checkbox'><input checked={newCardMilestone} onChange={(event) => setNewCardMilestone(event.target.checked)} type='checkbox'/> milestone</label>
                             <button className='flow-button flow-button--primary' type='submit' disabled={saving}>Add card</button>
+                            {selectedTemplate && (
+                                <div className='flow-quick-create__wide flow-template-hint'>
+                                    Template applies hidden defaults too: {describeTemplateCoverage(selectedTemplate)}.
+                                </div>
+                            )}
                             <div className='flow-form-field flow-quick-create__wide'>
                                 <span>Assignees</span>
                                 <UserPicker
@@ -1179,6 +1331,62 @@ function diffInDays(target: Date, source: Date) {
     targetDate.setHours(0, 0, 0, 0);
     sourceDate.setHours(0, 0, 0, 0);
     return Math.round((targetDate.getTime() - sourceDate.getTime()) / 86400000);
+}
+
+function resolveTemplateDate(offset?: number) {
+    if (offset === undefined) {
+        return '';
+    }
+
+    const next = new Date();
+    next.setHours(0, 0, 0, 0);
+    next.setDate(next.getDate() + offset);
+    return formatInputDate(next);
+}
+
+function cloneChecklist(checklist: CardTemplate['checklist']) {
+    return checklist.map((item) => ({
+        id: '',
+        text: item.text,
+        completed: item.completed,
+    }));
+}
+
+function cloneAttachmentLinks(links: CardTemplate['attachment_links']) {
+    return links.map((link) => ({
+        id: '',
+        title: link.title,
+        url: link.url,
+    }));
+}
+
+function describeTemplateCoverage(template: CardTemplate) {
+    const parts = ['milestone state'];
+
+    if (template.description) {
+        parts.unshift('description');
+    }
+    if (template.labels.length > 0) {
+        parts.push('labels');
+    }
+    if (template.checklist.length > 0) {
+        parts.push('checklist');
+    }
+    if (template.attachment_links.length > 0) {
+        parts.push('links');
+    }
+    if (template.start_offset_days !== undefined) {
+        parts.push('start date');
+    }
+    if (template.due_offset_days !== undefined) {
+        parts.push('due date');
+    }
+
+    if (parts.length === 1) {
+        return parts[0];
+    }
+
+    return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
 }
 
 function canPatchBoardEvent(event: FlowStreamEvent) {

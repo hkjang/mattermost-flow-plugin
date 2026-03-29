@@ -11,6 +11,7 @@ Live site: [hkjang.github.io/mattermost-flow-plugin](https://hkjang.github.io/ma
 - Team-scoped and channel-scoped boards with default columns: `Todo`, `In Progress`, `Review`, `Done`
 - Board and gantt views in one plugin, including drag-and-drop card movement and gantt date resizing
 - Rich cards with assignees, labels, priority, dates, progress, milestone flag, checklist, comments, links, and dependencies
+- Board-scoped card templates for reusable release, bugfix, handoff, and milestone workflows
 - Mattermost-native collaboration with slash commands, channel header entry point, channel posts, mentions, deep links, and quick post actions
 - Plugin API, KV store persistence, and server-sent events for live board and sidebar updates
 
@@ -70,6 +71,7 @@ dist/com.mattermost.flow-plugin-<version>.tar.gz
 - Web app: React + TypeScript plugin UI for board, gantt, filters, post UI, and real-time updates
 - Server plugin: Go service layer, custom API under `/plugins/com.mattermost.flow-plugin/api/v1`, authorization, KV storage, jobs, and Mattermost integration
 - Storage: Mattermost plugin KV store for boards, columns, cards, dependencies, activity logs, preferences, and due-soon notifications
+- Reuse: board-scoped card templates saved with default labels, checklist, links, milestone state, and relative dates
 - Collaboration: Mattermost posts, mentions, post quick actions, slash commands, deep links, and SSE streams
 
 ## Development

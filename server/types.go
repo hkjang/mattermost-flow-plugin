@@ -70,6 +70,24 @@ type CardComment struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+type CardTemplate struct {
+	ID              string           `json:"id"`
+	BoardID         string           `json:"board_id"`
+	Name            string           `json:"name"`
+	Title           string           `json:"title"`
+	Description     string           `json:"description"`
+	Labels          []string         `json:"labels"`
+	Priority        string           `json:"priority"`
+	StartOffsetDays *int             `json:"start_offset_days,omitempty"`
+	DueOffsetDays   *int             `json:"due_offset_days,omitempty"`
+	Milestone       bool             `json:"milestone"`
+	Checklist       []ChecklistItem  `json:"checklist"`
+	AttachmentLinks []AttachmentLink `json:"attachment_links"`
+	CreatedBy       string           `json:"created_by"`
+	CreatedAt       int64            `json:"created_at"`
+	UpdatedAt       int64            `json:"updated_at"`
+}
+
 type Card struct {
 	ID              string           `json:"id"`
 	BoardID         string           `json:"board_id"`
@@ -159,13 +177,14 @@ type BoardSummary struct {
 }
 
 type BoardBundle struct {
-	Board        Board         `json:"board"`
-	Columns      []BoardColumn `json:"columns"`
-	Cards        []Card        `json:"cards"`
-	Dependencies []Dependency  `json:"dependencies"`
-	Activity     []Activity    `json:"activity"`
-	Preference   Preference    `json:"preference"`
-	Summary      BoardSummary  `json:"summary"`
+	Board        Board          `json:"board"`
+	Columns      []BoardColumn  `json:"columns"`
+	Templates    []CardTemplate `json:"templates"`
+	Cards        []Card         `json:"cards"`
+	Dependencies []Dependency   `json:"dependencies"`
+	Activity     []Activity     `json:"activity"`
+	Preference   Preference     `json:"preference"`
+	Summary      BoardSummary   `json:"summary"`
 }
 
 type GanttViewData struct {
@@ -200,24 +219,26 @@ type CommentMutationResult struct {
 }
 
 type CreateBoardRequest struct {
-	TeamID       string             `json:"team_id"`
-	ChannelID    string             `json:"channel_id"`
-	Name         string             `json:"name"`
-	Description  string             `json:"description"`
-	Visibility   string             `json:"visibility"`
-	AdminIDs     []string           `json:"admin_ids"`
-	Columns      []BoardColumnInput `json:"columns"`
-	Settings     *BoardSettings     `json:"settings"`
-	SetAsDefault bool               `json:"set_as_default"`
+	TeamID       string              `json:"team_id"`
+	ChannelID    string              `json:"channel_id"`
+	Name         string              `json:"name"`
+	Description  string              `json:"description"`
+	Visibility   string              `json:"visibility"`
+	AdminIDs     []string            `json:"admin_ids"`
+	Columns      []BoardColumnInput  `json:"columns"`
+	Templates    []CardTemplateInput `json:"templates"`
+	Settings     *BoardSettings      `json:"settings"`
+	SetAsDefault bool                `json:"set_as_default"`
 }
 
 type UpdateBoardRequest struct {
-	Name        *string             `json:"name"`
-	Description *string             `json:"description"`
-	AdminIDs    *[]string           `json:"admin_ids"`
-	Columns     *[]BoardColumnInput `json:"columns"`
-	Settings    *BoardSettings      `json:"settings"`
-	Version     *int64              `json:"version"`
+	Name        *string              `json:"name"`
+	Description *string              `json:"description"`
+	AdminIDs    *[]string            `json:"admin_ids"`
+	Columns     *[]BoardColumnInput  `json:"columns"`
+	Templates   *[]CardTemplateInput `json:"templates"`
+	Settings    *BoardSettings       `json:"settings"`
+	Version     *int64               `json:"version"`
 }
 
 type BoardColumnInput struct {
@@ -225,6 +246,20 @@ type BoardColumnInput struct {
 	Name      string `json:"name"`
 	SortOrder int    `json:"sort_order"`
 	WIPLimit  int    `json:"wip_limit"`
+}
+
+type CardTemplateInput struct {
+	ID              string           `json:"id"`
+	Name            string           `json:"name"`
+	Title           string           `json:"title"`
+	Description     string           `json:"description"`
+	Labels          []string         `json:"labels"`
+	Priority        string           `json:"priority"`
+	StartOffsetDays *int             `json:"start_offset_days"`
+	DueOffsetDays   *int             `json:"due_offset_days"`
+	Milestone       bool             `json:"milestone"`
+	Checklist       []ChecklistItem  `json:"checklist"`
+	AttachmentLinks []AttachmentLink `json:"attachment_links"`
 }
 
 type CreateCardRequest struct {

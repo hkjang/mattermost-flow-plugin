@@ -48,6 +48,24 @@ export type CardComment = {
     created_at: number;
 };
 
+export type CardTemplate = {
+    id: string;
+    board_id: string;
+    name: string;
+    title: string;
+    description: string;
+    labels: string[];
+    priority: Card['priority'];
+    start_offset_days?: number;
+    due_offset_days?: number;
+    milestone: boolean;
+    checklist: ChecklistItem[];
+    attachment_links: AttachmentLink[];
+    created_by: string;
+    created_at: number;
+    updated_at: number;
+};
+
 export type Card = {
     id: string;
     board_id: string;
@@ -132,6 +150,7 @@ export type BoardSummary = {
 export type BoardBundle = {
     board: Board;
     columns: BoardColumn[];
+    templates: CardTemplate[];
     cards: Card[];
     dependencies: Dependency[];
     activity: Activity[];
@@ -177,6 +196,20 @@ export type BoardColumnInput = {
     wip_limit: number;
 };
 
+export type CardTemplateInput = {
+    id?: string;
+    name: string;
+    title: string;
+    description: string;
+    labels: string[];
+    priority: Card['priority'];
+    start_offset_days?: number;
+    due_offset_days?: number;
+    milestone: boolean;
+    checklist: ChecklistItem[];
+    attachment_links: AttachmentLink[];
+};
+
 export type CreateBoardRequest = {
     team_id?: string;
     channel_id?: string;
@@ -185,6 +218,7 @@ export type CreateBoardRequest = {
     visibility: 'team' | 'channel';
     admin_ids: string[];
     columns: BoardColumnInput[];
+    templates?: CardTemplateInput[];
     settings: BoardSettings;
     set_as_default: boolean;
 };
@@ -194,6 +228,7 @@ export type UpdateBoardRequest = Partial<{
     description: string;
     admin_ids: string[];
     columns: BoardColumnInput[];
+    templates: CardTemplateInput[];
     settings: BoardSettings;
     version: number;
 }>;

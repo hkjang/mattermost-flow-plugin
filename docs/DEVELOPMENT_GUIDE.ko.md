@@ -103,13 +103,14 @@ make logs
 
 - `Board`
 - `BoardColumn`
+- `CardTemplate`
 - `Card`
 - `Dependency`
 - `Activity`
 - `Preference`
 - `DueSoonNotification`
 
-데이터는 Mattermost 플러그인 KV 저장소에 저장됩니다. 보드 요약, 활동, 실시간 업데이트는 write path 가까이에 유지해서 사이드바와 보드 화면이 전체 새로고침 없이도 빠르게 자신을 patch할 수 있게 합니다.
+데이터는 Mattermost 플러그인 KV 저장소에 저장됩니다. 템플릿도 보드 단위로 컬럼과 카드와 함께 저장됩니다. 보드 요약, 활동, 실시간 업데이트는 write path 가까이에 유지해서 사이드바와 보드 화면이 전체 새로고침 없이도 빠르게 자신을 patch할 수 있게 합니다.
 
 ## 협업 기능에서 주의할 점
 
