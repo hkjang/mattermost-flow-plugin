@@ -4,7 +4,9 @@
     "description": "Kanban board and gantt collaboration plugin for Mattermost.",
     "homepage_url": "https://github.com/hkjang/mattermost-flow-plugin",
     "support_url": "https://github.com/hkjang/mattermost-flow-plugin/issues",
+    "release_notes_url": "https://github.com/hkjang/mattermost-flow-plugin/releases/tag/v0.2.0",
     "icon_path": "assets/starter-template-icon.svg",
+    "version": "0.2.0",
     "min_server_version": "6.2.1",
     "server": {
         "executables": {
@@ -19,8 +21,63 @@
         "bundle_path": "webapp/dist/main.js"
     },
     "settings_schema": {
-        "header": "",
-        "footer": "",
-        "settings": []
+        "header": "Configure the Mattermost Flow Plugin. Changes take effect immediately.",
+        "footer": "For more information, visit the [documentation](https://github.com/hkjang/mattermost-flow-plugin).",
+        "settings": [
+            {
+                "key": "MaxBoardsPerChannel",
+                "display_name": "Max Boards per Channel",
+                "type": "number",
+                "default": 10,
+                "help_text": "Maximum number of boards that can be created in a single channel. Set to 0 for unlimited."
+            },
+            {
+                "key": "MaxCardsPerBoard",
+                "display_name": "Max Cards per Board",
+                "type": "number",
+                "default": 500,
+                "help_text": "Maximum number of cards allowed per board. Set to 0 for unlimited."
+            },
+            {
+                "key": "DueSoonHours",
+                "display_name": "Due Soon Notification Hours",
+                "type": "number",
+                "default": 48,
+                "help_text": "How many hours before a due date should 'due soon' notifications be posted. Default is 48 hours."
+            },
+            {
+                "key": "EnableCalendarFeed",
+                "display_name": "Enable Calendar Feed (iCal)",
+                "type": "bool",
+                "default": true,
+                "help_text": "Allow users to subscribe to board calendars via iCal feed (.ics). Disable if calendar feeds should not be exposed."
+            },
+            {
+                "key": "EnableBoardExportImport",
+                "display_name": "Enable Board Export/Import",
+                "type": "bool",
+                "default": true,
+                "help_text": "Allow users to export and import boards as JSON packages."
+            },
+            {
+                "key": "DefaultBoardView",
+                "display_name": "Default Board View",
+                "type": "dropdown",
+                "default": "board",
+                "help_text": "The default view when opening a board for the first time.",
+                "options": [
+                    {"display_name": "Board (Kanban)", "value": "board"},
+                    {"display_name": "Gantt (Timeline)", "value": "gantt"},
+                    {"display_name": "Dashboard", "value": "dashboard"}
+                ]
+            },
+            {
+                "key": "BackgroundJobIntervalMinutes",
+                "display_name": "Background Job Interval (minutes)",
+                "type": "number",
+                "default": 60,
+                "help_text": "Interval in minutes for running background tasks such as due-soon notifications. Minimum 5 minutes."
+            }
+        ]
     }
 }

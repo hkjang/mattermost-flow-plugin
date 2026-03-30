@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 
-import {flowClient} from './client';
+import {flowClient, type FlowClientConfig} from './client';
+import {ConfirmDialog} from './confirm_dialog';
 import {subscribeFlowSync} from './flow_sync';
 import {
     DEFAULT_BOARD_SETTINGS,
@@ -142,6 +143,9 @@ export function FlowPage({context}: FlowPageProps) {
     const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
     const [importBoardName, setImportBoardName] = useState('');
     const [importPayloadText, setImportPayloadText] = useState('');
+    const [clientConfig, setClientConfig] = useState<FlowClientConfig | null>(null);
+    const [confirmDialog, setConfirmDialog] = useState<{title: string; message: string; confirmLabel: string; danger: boolean; action: () => void} | null>(null);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const liveRefreshTimerRef = useRef<number | null>(null);
     const pendingStreamEventsRef = useRef<Record<string, number>>({});
 
@@ -150,6 +154,10 @@ export function FlowPage({context}: FlowPageProps) {
     const requestedBoardId = params.get('board_id') || '';
     const requestedCardId = params.get('card_id') || '';
     const requestedView = params.get('view') === 'gantt' ? 'gantt' : params.get('view') === 'dashboard' ? 'dashboard' : params.get('view') === 'board' ? 'board' : '';
+
+    useEffect(() => {
+        void flowClient.getClientConfig().then(setClientConfig).catch(() => undefined);
+    }, []);
 
     useEffect(() => {
         let active = true;
@@ -208,7 +216,7 @@ export function FlowPage({context}: FlowPageProps) {
                 }
                 setBoardData(response);
                 setBoardSettingsDraft(createBoardSettingsDraft(response));
-                setViewType((requestedView as 'board' | 'gantt' | 'dashboard') || response.preference.view_type || response.board.settings.default_view || 'board');
+                setViewType((requestedView as 'board' | 'gantt' | 'dashboard') || response.preference.view_type || response.board.settings.default_view || (clientConfig?.default_board_view as 'board' | 'gantt' | 'dashboard') || 'board');
                 setZoomLevel(response.preference.zoom_level || 'week');
                 setFilters(response.preference.filters || EMPTY_FILTERS);
                 setPreferencesReady(true);
@@ -263,6 +271,57 @@ export function FlowPage({context}: FlowPageProps) {
         }, 300);
         return () => window.clearTimeout(timeout);
     }, [preferencesReady, selectedBoardId, viewType, zoomLevel, filters]);
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        function handleKeyDown(event: KeyboardEvent) {
+            const target = event.target as HTMLElement;
+            const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable;
+
+            if (event.key === 'Escape') {
+                if (confirmDialog) {
+                    setConfirmDialog(null);
+                    return;
+                }
+                if (boardSettingsOpen) {
+                    setBoardSettingsOpen(false);
+                    return;
+                }
+                if (selectedCardId) {
+                    setSelectedCardId('');
+                    return;
+                }
+            }
+
+            if (isInputFocused) {
+                return;
+            }
+
+            if (event.key === 'n' && !event.ctrlKey && !event.metaKey) {
+                // Focus the quick-create title input
+                const input = document.querySelector<HTMLInputElement>('.flow-quick-create input[type="text"]');
+                if (input) {
+                    event.preventDefault();
+                    input.focus();
+                }
+            }
+
+            if (event.key === '1' && !event.ctrlKey && !event.metaKey) {
+                setViewType('board');
+            }
+            if (event.key === '2' && !event.ctrlKey && !event.metaKey) {
+                setViewType('gantt');
+            }
+            if (event.key === '3' && !event.ctrlKey && !event.metaKey) {
+                setViewType('dashboard');
+            }
+            if (event.key === 's' && !event.ctrlKey && !event.metaKey) {
+                setBoardSettingsOpen((v) => !v);
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [confirmDialog, boardSettingsOpen, selectedCardId]);
 
     const selectedBoard = boardData?.board || null;
     const selectedCard = boardData?.cards.find((card) => card.id === selectedCardId) || null;
@@ -912,20 +971,55 @@ export function FlowPage({context}: FlowPageProps) {
         }
     }
 
-    async function deleteBoard() {
-        if (!selectedBoard || !window.confirm(`Delete '${selectedBoard.name}'?`)) {
+    function deleteBoard() {
+        if (!selectedBoard) {
             return;
         }
-        setSaving(true);
-        try {
-            await flowClient.deleteBoard(selectedBoard.id);
-            await refreshBoards();
-            setNotice('Board deleted.');
-        } catch (deleteError) {
-            setError(getErrorMessage(deleteError));
-        } finally {
-            setSaving(false);
+        setConfirmDialog({
+            title: 'Delete board',
+            message: `Are you sure you want to delete "${selectedBoard.name}"? This will remove all cards, dependencies, and activity. This action cannot be undone.`,
+            confirmLabel: 'Delete board',
+            danger: true,
+            action: async () => {
+                setConfirmDialog(null);
+                setSaving(true);
+                try {
+                    await flowClient.deleteBoard(selectedBoard.id);
+                    await refreshBoards();
+                    setNotice('Board deleted.');
+                } catch (deleteError) {
+                    setError(getErrorMessage(deleteError));
+                } finally {
+                    setSaving(false);
+                }
+            },
+        });
+    }
+
+    function deleteCard() {
+        if (!selectedCard || !selectedBoard) {
+            return;
         }
+        setConfirmDialog({
+            title: 'Delete card',
+            message: `Are you sure you want to delete "${selectedCard.title}"? This will also remove its dependencies and comments. This action cannot be undone.`,
+            confirmLabel: 'Delete card',
+            danger: true,
+            action: async () => {
+                setConfirmDialog(null);
+                setSaving(true);
+                try {
+                    await flowClient.deleteCard(selectedCard.id);
+                    setSelectedCardId('');
+                    await refreshBoard();
+                    setNotice('Card deleted.');
+                } catch (deleteError) {
+                    setError(getErrorMessage(deleteError));
+                } finally {
+                    setSaving(false);
+                }
+            },
+        });
     }
 
     async function copyLink(url: string, message: string) {
@@ -1105,7 +1199,25 @@ export function FlowPage({context}: FlowPageProps) {
     }
 
     return (
-        <div className='flow-shell'>
+        <div className={`flow-shell ${sidebarOpen ? 'flow-shell--sidebar-open' : ''}`}>
+            <button
+                className='flow-sidebar-toggle'
+                type='button'
+                onClick={() => setSidebarOpen((v) => !v)}
+                aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+            >
+                {sidebarOpen ? '\u2715' : '\u2630'}
+            </button>
+            {confirmDialog && (
+                <ConfirmDialog
+                    title={confirmDialog.title}
+                    message={confirmDialog.message}
+                    confirmLabel={confirmDialog.confirmLabel}
+                    danger={confirmDialog.danger}
+                    onConfirm={confirmDialog.action}
+                    onCancel={() => setConfirmDialog(null)}
+                />
+            )}
             <aside className='flow-sidebar'>
                 <div className='flow-sidebar__brand'>
                     <div className='flow-sidebar__eyebrow'>Mattermost Flow</div>
@@ -1193,7 +1305,7 @@ export function FlowPage({context}: FlowPageProps) {
                         <button className='flow-button' onClick={() => copyBoardLink('board')} disabled={!selectedBoard}>Copy board link</button>
                         <button className='flow-button' onClick={() => copyBoardLink('dashboard')} disabled={!selectedBoard}>Copy dashboard link</button>
                         <button className='flow-button' onClick={() => copyBoardLink('gantt')} disabled={!selectedBoard}>Copy gantt link</button>
-                        <button className='flow-button' onClick={openCalendarDownload} disabled={!selectedBoard}>Open calendar .ics</button>
+                        {clientConfig?.enable_calendar_feed !== false && <button className='flow-button' onClick={openCalendarDownload} disabled={!selectedBoard}>Open calendar .ics</button>}
                         <button className='flow-button' onClick={() => setBoardSettingsOpen((value) => !value)} disabled={!selectedBoard}>Settings</button>
                         <button className='flow-button flow-button--danger' onClick={deleteBoard} disabled={!selectedBoard || saving}>Delete</button>
                     </div>
@@ -1235,9 +1347,9 @@ export function FlowPage({context}: FlowPageProps) {
                             <label><input checked={boardSettingsDraft.postUpdates} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, postUpdates: event.target.checked})} type='checkbox'/> Post channel updates</label>
                             <label><input checked={boardSettingsDraft.postDueSoon} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, postDueSoon: event.target.checked})} type='checkbox'/> Post due soon alerts</label>
                             <label><input checked={boardSettingsDraft.allowMentions} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, allowMentions: event.target.checked})} type='checkbox'/> Allow mentions</label>
-                            <label><input checked={boardSettingsDraft.calendarFeedEnabled} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, calendarFeedEnabled: event.target.checked})} type='checkbox'/> Enable calendar feed</label>
+                            {clientConfig?.enable_calendar_feed !== false && <label><input checked={boardSettingsDraft.calendarFeedEnabled} onChange={(event) => setBoardSettingsDraft({...boardSettingsDraft, calendarFeedEnabled: event.target.checked})} type='checkbox'/> Enable calendar feed</label>}
                         </div>
-                        <div className='flow-calendar-panel'>
+                        {clientConfig?.enable_calendar_feed !== false && <div className='flow-calendar-panel'>
                             <div className='flow-template-editor__header'>
                                 <div>
                                     <strong>Calendar integration</strong>
@@ -1264,7 +1376,7 @@ export function FlowPage({context}: FlowPageProps) {
                                     </div>
                                 </div>
                             )}
-                        </div>
+                        </div>}
                         <div className='flow-diagnostics-panel'>
                             <div className='flow-template-editor__header'>
                                 <div>
@@ -1318,7 +1430,7 @@ export function FlowPage({context}: FlowPageProps) {
                                 </>
                             )}
                         </div>
-                        <div className='flow-data-panel'>
+                        {clientConfig?.enable_export_import !== false && <div className='flow-data-panel'>
                             <div className='flow-template-editor__header'>
                                 <div>
                                     <strong>Board export and import</strong>
@@ -1349,7 +1461,7 @@ export function FlowPage({context}: FlowPageProps) {
                             <div className='flow-settings__actions'>
                                 <button className='flow-button flow-button--primary' type='button' onClick={importBoardPackage} disabled={saving || !importPayloadText.trim()}>Import as new board</button>
                             </div>
-                        </div>
+                        </div>}
                         <div className='flow-template-editor'>
                             <div className='flow-template-editor__header'>
                                 <div>
@@ -1498,6 +1610,7 @@ export function FlowPage({context}: FlowPageProps) {
                                                     <div
                                                         key={card.id}
                                                         className='flow-card'
+                                                        data-priority={card.priority || 'normal'}
                                                         draggable
                                                         onDragStart={(event) => event.dataTransfer.setData('text/plain', card.id)}
                                                         onClick={() => setSelectedCardId(card.id)}
@@ -1750,6 +1863,7 @@ export function FlowPage({context}: FlowPageProps) {
                                     </div>
                                     <div className='flow-detail__header-actions'>
                                         <button className='flow-button' type='button' onClick={copyCardLink}>Copy card link</button>
+                                        <button className='flow-button flow-button--danger' type='button' onClick={deleteCard} disabled={saving}>Delete</button>
                                         <span className={`flow-priority flow-priority--${selectedCard.priority}`}>{selectedCard.priority}</span>
                                     </div>
                                 </div>

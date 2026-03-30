@@ -275,6 +275,56 @@ func (s *FlowService) GetCard(cardID string) (Card, Board, error) {
 	return card, board, nil
 }
 
+func (s *FlowService) DeleteCard(actorID, cardID string) (*CardMutationResult, error) {
+	boardID, err := s.store.GetCardBoardID(cardID)
+	if err != nil {
+		return nil, err
+	}
+
+	card, err := s.store.GetCard(boardID, cardID)
+	if err != nil {
+		return nil, err
+	}
+
+	board, err := s.store.GetBoard(boardID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove dependencies referencing this card.
+	deps, _ := s.store.ListDependencies(boardID)
+	filtered := make([]Dependency, 0, len(deps))
+	for _, dep := range deps {
+		if dep.SourceCardID != cardID && dep.TargetCardID != cardID {
+			filtered = append(filtered, dep)
+		}
+	}
+	if len(filtered) != len(deps) {
+		_ = s.store.SaveDependencies(boardID, filtered)
+	}
+
+	if err := s.store.DeleteCard(boardID, cardID); err != nil {
+		return nil, err
+	}
+
+	columnName := ""
+	columns, _ := s.store.GetColumns(boardID)
+	for _, col := range columns {
+		if col.ID == card.ColumnID {
+			columnName = col.Name
+			break
+		}
+	}
+
+	_ = s.store.AppendActivity(boardID, newActivity(boardID, "card", cardID, "card.deleted", actorID, &card, nil))
+
+	return &CardMutationResult{
+		Board:      board,
+		Card:       card,
+		ColumnName: columnName,
+	}, nil
+}
+
 func (s *FlowService) CreateCard(actorID string, req CreateCardRequest) (*CardMutationResult, error) {
 	board, err := s.store.GetBoard(req.BoardID)
 	if err != nil {

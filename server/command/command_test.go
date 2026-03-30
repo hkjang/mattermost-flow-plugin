@@ -35,6 +35,18 @@ func (p *stubProvider) CreateCard(args *model.CommandArgs, title, dueDate string
 	return p.createMessage, p.createErr
 }
 
+func (p *stubProvider) ListBoardsSummary(_ *model.CommandArgs) (string, error) {
+	return "1 board(s)", nil
+}
+
+func (p *stubProvider) BoardStatus(_ *model.CommandArgs) (string, error) {
+	return "Board status", nil
+}
+
+func (p *stubProvider) AssignCard(_ *model.CommandArgs, _, _ string) (string, error) {
+	return "Assigned", nil
+}
+
 func setupTest() *env {
 	api := &plugintest.API{}
 	driver := &plugintest.Driver{}
@@ -53,7 +65,7 @@ func expectFlowCommandRegistration(t *testing.T, api *plugintest.API) {
 		return command.Trigger == flowCommandTrigger &&
 			command.AutoComplete &&
 			command.AutoCompleteDesc == "Open Mattermost Flow boards and create cards" &&
-			command.AutoCompleteHint == "[open|new|help]" &&
+			command.AutoCompleteHint == "[open|new|list|status|assign|help]" &&
 			reflect.DeepEqual(command.AutocompleteData, buildAutocompleteData())
 	})).Return(nil).Once()
 }

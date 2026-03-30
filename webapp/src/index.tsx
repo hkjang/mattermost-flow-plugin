@@ -5,6 +5,7 @@ import type {Store} from 'redux';
 import type {Post} from '@mattermost/types/posts';
 import type {GlobalState} from '@mattermost/types/store';
 
+import {FlowErrorBoundary} from './error_boundary';
 import {FlowPage} from './flow_page';
 import {FlowPost} from './flow_post';
 import './styles.css';
@@ -38,7 +39,7 @@ const FlowIcon = () => (
 
 export default class Plugin {
     public async initialize(registry: PluginRegistry, store: Store<GlobalState>) {
-        const RouteComponent = () => <FlowPage context={readContext(store)}/>;
+        const RouteComponent = () => <FlowErrorBoundary><FlowPage context={readContext(store)}/></FlowErrorBoundary>;
         const PostComponent = (props: {post: Post}) => {
             const state: any = store.getState();
             const currentUserId = state?.entities?.users?.currentUserId;

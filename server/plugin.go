@@ -64,10 +64,12 @@ func (p *Plugin) OnActivate() error {
 
 	p.router = p.initRouter()
 
+	cfg := p.getConfiguration()
+	jobInterval := time.Duration(cfg.BackgroundJobIntervalMinutes) * time.Minute
 	job, err := cluster.Schedule(
 		p.API,
 		"BackgroundJob",
-		cluster.MakeWaitForRoundedInterval(1*time.Hour),
+		cluster.MakeWaitForRoundedInterval(jobInterval),
 		p.runJob,
 	)
 	if err != nil {

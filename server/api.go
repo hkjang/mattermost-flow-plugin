@@ -22,6 +22,7 @@ func (p *Plugin) initRouter() *mux.Router {
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
 	apiRouter.Use(p.MattermostAuthorizationRequired)
 	apiRouter.HandleFunc("/ping", p.handlePing).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/config", p.handleGetClientConfig).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards", p.handleListBoards).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards/summary/stream", p.handleBoardSummaryStream).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/boards", p.handleCreateBoard).Methods(http.MethodPost)
@@ -43,6 +44,7 @@ func (p *Plugin) initRouter() *mux.Router {
 	apiRouter.HandleFunc("/boards/{id}/users", p.handleListBoardUsers).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/cards", p.handleCreateCard).Methods(http.MethodPost)
 	apiRouter.HandleFunc("/cards/{id}", p.handleUpdateCard).Methods(http.MethodPatch)
+	apiRouter.HandleFunc("/cards/{id}", p.handleDeleteCard).Methods(http.MethodDelete)
 	apiRouter.HandleFunc("/cards/{id}/move", p.handleMoveCard).Methods(http.MethodPost)
 	apiRouter.HandleFunc("/cards/{id}/actions/{action}", p.handleCardAction).Methods(http.MethodPost)
 	apiRouter.HandleFunc("/cards/{id}/dependencies", p.handleAddDependency).Methods(http.MethodPost)
@@ -73,6 +75,17 @@ func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler
 
 func (p *Plugin) handlePing(w http.ResponseWriter, r *http.Request) {
 	p.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (p *Plugin) handleGetClientConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := p.getConfiguration()
+	p.writeJSON(w, http.StatusOK, map[string]any{
+		"enable_calendar_feed":     cfg.EnableCalendarFeed,
+		"enable_export_import":     cfg.EnableBoardExportImport,
+		"default_board_view":       cfg.DefaultBoardView,
+		"max_boards_per_channel":   cfg.MaxBoardsPerChannel,
+		"max_cards_per_board":      cfg.MaxCardsPerBoard,
+	})
 }
 
 func (p *Plugin) handleListBoards(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +126,20 @@ func (p *Plugin) handleCreateBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enforce MaxBoardsPerChannel from admin settings.
+	cfg := p.getConfiguration()
+	if cfg.MaxBoardsPerChannel > 0 && req.ChannelID != "" {
+		existing, err := p.service.ListBoards(ScopeQuery{ChannelID: req.ChannelID})
+		if err != nil {
+			p.writeError(w, err)
+			return
+		}
+		if len(existing) >= cfg.MaxBoardsPerChannel {
+			p.writeError(w, newValidationError(fmt.Sprintf("channel already has the maximum allowed boards (%d)", cfg.MaxBoardsPerChannel)))
+			return
+		}
+	}
+
 	board, err := p.service.CreateBoard(userID, req)
 	if err != nil {
 		p.writeError(w, err)
@@ -130,6 +157,11 @@ func (p *Plugin) handleCreateBoard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) handleImportBoard(w http.ResponseWriter, r *http.Request) {
+	if !p.getConfiguration().EnableBoardExportImport {
+		http.Error(w, "Board import is disabled by the system administrator", http.StatusForbidden)
+		return
+	}
+
 	userID := p.getUserID(r)
 
 	var req ImportBoardRequest
@@ -245,6 +277,11 @@ func (p *Plugin) handleDeleteBoard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) handleExportBoard(w http.ResponseWriter, r *http.Request) {
+	if !p.getConfiguration().EnableBoardExportImport {
+		http.Error(w, "Board export is disabled by the system administrator", http.StatusForbidden)
+		return
+	}
+
 	userID := p.getUserID(r)
 	boardID := mux.Vars(r)["id"]
 
@@ -268,6 +305,11 @@ func (p *Plugin) handleExportBoard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) handleGetBoardCalendarFeed(w http.ResponseWriter, r *http.Request) {
+	if !p.getConfiguration().EnableCalendarFeed {
+		http.Error(w, "Calendar feed is disabled by the system administrator", http.StatusForbidden)
+		return
+	}
+
 	userID := p.getUserID(r)
 	boardID := mux.Vars(r)["id"]
 
@@ -291,6 +333,11 @@ func (p *Plugin) handleGetBoardCalendarFeed(w http.ResponseWriter, r *http.Reque
 }
 
 func (p *Plugin) handleRotateBoardCalendarFeed(w http.ResponseWriter, r *http.Request) {
+	if !p.getConfiguration().EnableCalendarFeed {
+		http.Error(w, "Calendar feed is disabled by the system administrator", http.StatusForbidden)
+		return
+	}
+
 	userID := p.getUserID(r)
 	boardID := mux.Vars(r)["id"]
 
@@ -326,6 +373,11 @@ func (p *Plugin) handleRotateBoardCalendarFeed(w http.ResponseWriter, r *http.Re
 }
 
 func (p *Plugin) handleAuthenticatedBoardCalendarICS(w http.ResponseWriter, r *http.Request) {
+	if !p.getConfiguration().EnableCalendarFeed {
+		http.Error(w, "Calendar feed is disabled by the system administrator", http.StatusForbidden)
+		return
+	}
+
 	userID := p.getUserID(r)
 	boardID := mux.Vars(r)["id"]
 
@@ -402,6 +454,15 @@ func (p *Plugin) handleRepairBoardDiagnostics(w http.ResponseWriter, r *http.Req
 }
 
 func (p *Plugin) handlePublicBoardCalendarICS(w http.ResponseWriter, r *http.Request) {
+	if p.service == nil {
+		http.Error(w, "Plugin not initialized", http.StatusServiceUnavailable)
+		return
+	}
+	if !p.getConfiguration().EnableCalendarFeed {
+		http.Error(w, "Calendar feed is disabled", http.StatusForbidden)
+		return
+	}
+
 	boardID := mux.Vars(r)["id"]
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 
@@ -706,6 +767,20 @@ func (p *Plugin) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enforce MaxCardsPerBoard from admin settings.
+	cfg := p.getConfiguration()
+	if cfg.MaxCardsPerBoard > 0 {
+		cards, err := p.service.ListCards(req.BoardID)
+		if err != nil {
+			p.writeError(w, err)
+			return
+		}
+		if len(cards) >= cfg.MaxCardsPerBoard {
+			p.writeError(w, newValidationError(fmt.Sprintf("board already has the maximum allowed cards (%d)", cfg.MaxCardsPerBoard)))
+			return
+		}
+	}
+
 	req.AssigneeIDs = p.normalizeAssignees(req.AssigneeIDs)
 
 	result, err := p.service.CreateCard(userID, req)
@@ -770,6 +845,39 @@ func (p *Plugin) handleUpdateCard(w http.ResponseWriter, r *http.Request) {
 		Card:       &result.Card,
 	})
 	p.writeJSON(w, http.StatusOK, result)
+}
+
+func (p *Plugin) handleDeleteCard(w http.ResponseWriter, r *http.Request) {
+	userID := p.getUserID(r)
+	cardID := mux.Vars(r)["id"]
+
+	_, board, err := p.service.GetCard(cardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	if err := p.authorizeBoard(userID, board, false); err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	result, err := p.service.DeleteCard(userID, cardID)
+	if err != nil {
+		p.writeError(w, err)
+		return
+	}
+
+	p.publishBoardEvent(BoardStreamEvent{
+		BoardID:    result.Board.ID,
+		EntityType: "card",
+		Action:     "card.deleted",
+		ActorID:    userID,
+		CardID:     cardID,
+		Board:      &result.Board,
+		Card:       &result.Card,
+	})
+	p.writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (p *Plugin) handleMoveCard(w http.ResponseWriter, r *http.Request) {

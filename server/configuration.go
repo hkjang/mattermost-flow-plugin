@@ -17,7 +17,43 @@ import (
 //
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
-type configuration struct{}
+type configuration struct {
+	// MaxBoardsPerChannel is the maximum number of boards that can be created per channel.
+	// A value of 0 means unlimited.
+	MaxBoardsPerChannel int `json:"MaxBoardsPerChannel"`
+
+	// MaxCardsPerBoard is the maximum number of cards allowed per board.
+	// A value of 0 means unlimited.
+	MaxCardsPerBoard int `json:"MaxCardsPerBoard"`
+
+	// DueSoonHours is how many hours before a due date to send "due soon" notifications.
+	DueSoonHours int `json:"DueSoonHours"`
+
+	// EnableCalendarFeed enables or disables calendar feed (iCal) functionality.
+	EnableCalendarFeed bool `json:"EnableCalendarFeed"`
+
+	// EnableBoardExportImport enables or disables board export/import functionality.
+	EnableBoardExportImport bool `json:"EnableBoardExportImport"`
+
+	// DefaultBoardView is the default view when opening a board (board, gantt, dashboard).
+	DefaultBoardView string `json:"DefaultBoardView"`
+
+	// BackgroundJobIntervalMinutes is the interval for running background tasks.
+	BackgroundJobIntervalMinutes int `json:"BackgroundJobIntervalMinutes"`
+}
+
+// setDefaults fills zero-value fields with sensible defaults that match plugin.json.
+func (c *configuration) setDefaults() {
+	if c.DueSoonHours <= 0 {
+		c.DueSoonHours = 48
+	}
+	if c.DefaultBoardView == "" {
+		c.DefaultBoardView = "board"
+	}
+	if c.BackgroundJobIntervalMinutes < 5 {
+		c.BackgroundJobIntervalMinutes = 60
+	}
+}
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
 // your configuration has reference types.
@@ -34,7 +70,9 @@ func (p *Plugin) getConfiguration() *configuration {
 	defer p.configurationLock.RUnlock()
 
 	if p.configuration == nil {
-		return &configuration{}
+		cfg := &configuration{}
+		cfg.setDefaults()
+		return cfg
 	}
 
 	return p.configuration
@@ -76,6 +114,7 @@ func (p *Plugin) OnConfigurationChange() error {
 		return errors.Wrap(err, "failed to load plugin configuration")
 	}
 
+	configuration.setDefaults()
 	p.setConfiguration(configuration)
 
 	return nil

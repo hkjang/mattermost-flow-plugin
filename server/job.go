@@ -14,6 +14,8 @@ func (p *Plugin) runJob() {
 		return
 	}
 
+	cfg := p.getConfiguration()
+
 	boards, err := p.service.ListAllBoards()
 	if err != nil {
 		p.API.LogError("flow background job failed to list boards", "error", err.Error())
@@ -21,6 +23,7 @@ func (p *Plugin) runJob() {
 	}
 
 	now := time.Now().UTC()
+	dueSoonHours := cfg.DueSoonHours
 	for _, board := range boards {
 		if board.ChannelID == "" || !board.Settings.PostDueSoon {
 			continue
@@ -33,14 +36,14 @@ func (p *Plugin) runJob() {
 		}
 
 		for _, card := range cards {
-			if err := p.processDueSoonNotification(board, card, now); err != nil {
+			if err := p.processDueSoonNotification(board, card, now, dueSoonHours); err != nil {
 				p.API.LogError("flow background job failed to process due soon notification", "board_id", board.ID, "card_id", card.ID, "error", err.Error())
 			}
 		}
 	}
 }
 
-func (p *Plugin) processDueSoonNotification(board Board, card Card, now time.Time) error {
+func (p *Plugin) processDueSoonNotification(board Board, card Card, now time.Time, dueSoonHours int) error {
 	if card.Progress >= 100 || strings.TrimSpace(card.DueDate) == "" {
 		if err := p.service.store.DeleteDueSoonNotification(board.ID, card.ID); err != nil && !errors.Is(err, ErrNotFound) {
 			return err
@@ -58,7 +61,7 @@ func (p *Plugin) processDueSoonNotification(board Board, card Card, now time.Tim
 		return err
 	}
 
-	if !isDueSoonDate(dueDate, now) {
+	if !isDueSoonDate(dueDate, now, dueSoonHours) {
 		if err == nil {
 			if deleteErr := p.service.store.DeleteDueSoonNotification(board.ID, card.ID); deleteErr != nil && !errors.Is(deleteErr, ErrNotFound) {
 				return deleteErr
@@ -83,9 +86,9 @@ func (p *Plugin) processDueSoonNotification(board Board, card Card, now time.Tim
 	})
 }
 
-func isDueSoonDate(dueDate, now time.Time) bool {
+func isDueSoonDate(dueDate, now time.Time, dueSoonHours int) bool {
 	today := startOfDay(now)
-	horizon := today.Add(48 * time.Hour)
+	horizon := today.Add(time.Duration(dueSoonHours) * time.Hour)
 	return !dueDate.Before(today) && !dueDate.After(horizon)
 }
 

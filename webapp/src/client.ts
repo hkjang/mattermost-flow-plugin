@@ -47,7 +47,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     return response.json() as Promise<T>;
 }
 
+export type FlowClientConfig = {
+    enable_calendar_feed: boolean;
+    enable_export_import: boolean;
+    default_board_view: string;
+    max_boards_per_channel: number;
+    max_cards_per_board: number;
+};
+
 export const flowClient = {
+    getClientConfig() {
+        return request<FlowClientConfig>('/config');
+    },
     getBoardStreamUrl(boardId: string) {
         return `${API_ROOT}/boards/${boardId}/stream`;
     },
@@ -129,6 +140,11 @@ export const flowClient = {
     },
     deleteBoard(boardId: string) {
         return request<{status: string}>(`/boards/${boardId}`, {
+            method: 'DELETE',
+        });
+    },
+    deleteCard(cardId: string) {
+        return request<{status: string}>(`/cards/${cardId}`, {
             method: 'DELETE',
         });
     },
